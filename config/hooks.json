@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "if": "Bash(make *)",
+            "statusMessage": "Checking make target for destructive operations...",
+            "timeout": 60,
+            "prompt": "You are a safety reviewer for `make` targets. The tool call is in $ARGUMENTS; extract the command string from `.tool_input.command` and the target name (e.g. 'deploy' from 'make deploy'). Read the Makefile in the current working directory (and any included makefiles) to find that target's recipe and resolve what it actually runs, following variables and sub-make calls as far as you reasonably can.\n\nIf the recipe runs anything that changes real state, decide \"ask\" so the user confirms. Destructive examples: terraform apply/destroy, deploy/release/publish, kubectl apply/delete, helm upgrade/uninstall, aws/gcloud/az mutations (delete, terminate, put, rm), database DROP/DELETE/TRUNCATE/migrate, docker push or rm -f, git push (especially --force), rm -rf outside build/tmp dirs.\n\nIf it only builds, tests, lints, formats, generates, or otherwise stays local and reversible, decide \"allow\". If you genuinely cannot tell what the target does, decide \"ask\".\n\nReturn ONLY valid JSON: {\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow|ask\",\"permissionDecisionReason\":\"one concise sentence naming the destructive op or why it is safe\"}}"
+          },
+          {
+            "type": "agent",
+            "if": "Bash(mise *)",
+            "statusMessage": "Checking mise task for destructive operations...",
+            "timeout": 60,
+            "prompt": "You are a safety reviewer for `mise` commands. The tool call is in $ARGUMENTS; extract the command string from `.tool_input.command`. If it runs a task (e.g. `mise run <task>`, or a task shortcut), read the mise config (.mise.toml, mise.toml, .config/mise/config.toml) and any referenced task files in the current working directory to resolve what the task actually executes.\n\nIf it changes real state, decide \"ask\" so the user confirms. Destructive examples: deploy/release/publish tasks, terraform apply/destroy, kubectl/helm mutations, cloud CLI mutations, database DROP/DELETE/migrate, git push, rm -rf outside build/tmp dirs, `mise uninstall`/`prune`. If it only builds, tests, lints, installs pinned tool versions, or stays local and reversible, decide \"allow\". If you cannot tell, decide \"ask\".\n\nReturn ONLY valid JSON: {\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow|ask\",\"permissionDecisionReason\":\"one concise sentence naming the destructive op or why it is safe\"}}"
+          }
+        ]
+      }
+    ]
+  }
+}

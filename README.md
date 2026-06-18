@@ -1,2 +1,51 @@
 # Claude-Skills
-Helper to get Claude to work better
+
+A guide to working with Claude the way I want: one playbook of rules, a set of task flows, and a setup that loads them into every session. This repo is the single source of truth; everything else points back to it.
+
+## Set up once
+
+```bash
+scripts/install.sh
+```
+
+That wires the repo into Claude Code (skills, commands, permissions, the playbook) and checks the `gh` and `jira` tools. Restart Claude Code afterward. Full steps and tool login in [docs/getting-started.md](docs/getting-started.md).
+
+## Using it day to day
+
+You rarely think about the pieces; you just describe the task. The right flow fires on its own, or you invoke it with a slash command.
+
+**Start from a ticket or a PR.** Hand Claude a Jira key, a Jira URL, or a GitHub PR link and it gathers the full context first: the ticket, its linked issues, the investigation that created it, and the related PRs, reading other repos remotely if needed. Then it does the work.
+
+```text
+read DBI-1458
+/keru-writing-code DBI-1458
+/keru-pr-review https://github.com/dailypay/partner-integrations/pull/619
+```
+
+**Common flows** (type the command, or just describe it and the skill triggers):
+
+| You want to | Command | Give it |
+| --- | --- | --- |
+| Implement a change | `/keru-writing-code` | a ticket |
+| Review a PR | `/keru-pr-review` | a PR link |
+| Resolve review comments | `/keru-addressing-pr-comments` | a PR link |
+| Write a PR description | `/keru-pr-description` | a PR link |
+| Run an investigation | `/keru-investigation` | a ticket |
+| Draft a ticket | `/keru-writing-tickets` | a short description |
+| Just gather context | `/keru-gather-context` | a key, URL, PR, or repo |
+
+**What is safe.** Read commands and edits run without prompting; state-changing ones (`git commit`/`push`, `terraform apply`, PR merges, ticket writes) always ask first. `make`/`mise` are checked before running, so a hidden destructive target prompts you. Details in [docs/permissions.md](docs/permissions.md).
+
+## Changing how Claude works
+
+Edit the rule in [`playbook/PLAYBOOK.md`](playbook/PLAYBOOK.md), or the relevant skill/command/config, then re-run `scripts/install.sh`. There is nothing else to sync: every consumer reads from this repo. Why it is built this way is in [docs/architecture.md](docs/architecture.md).
+
+## Learn more
+
+- [getting-started.md](docs/getting-started.md): install, tool login, verify.
+- [playbook.md](docs/playbook.md): the rules, and how they load into every session.
+- [skills.md](docs/skills.md): how skills trigger, and the catalogue.
+- [commands.md](docs/commands.md): invoking commands vs letting skills fire.
+- [permissions.md](docs/permissions.md): the permission model and the make/mise hook.
+- [tools.md](docs/tools.md): `gh` and `jira` setup, and how context is gathered.
+- [architecture.md](docs/architecture.md): the single-source-of-truth design.
