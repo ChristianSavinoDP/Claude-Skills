@@ -20,3 +20,7 @@ Per the Playbook's "PR Descriptions":
 - Replace the `DBI-XXXX` placeholder with the real ticket ID.
 - "What Changed" describes the actual code, concisely.
 - "How to Test" only if there are meaningful manual steps (new endpoints, UI, specific scenarios). If it is purely internal logic covered by automated tests, write "Covered by unit/integration tests" or remove the section. Do not fabricate test steps.
+
+## Output
+
+Return the finished description as raw, copy-pasteable Markdown, not rendered prose. Put the whole thing in a single fenced code block so the user can copy it straight into GitHub. Since the description itself contains backticks and code fences, wrap it in a four-backtick fence (````) so the inner content does not break it. Output only that block, nothing after it.
