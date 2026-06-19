@@ -42,6 +42,8 @@ except (ValueError, OSError) as e:
     print("skip: cannot parse %s (%s); leaving settings untouched" % (settings_path, e))
     sys.exit(0)
 
+settings.pop("todoFeatureEnabled", None)  # set by an older installer; clean it up
+
 managed = settings.pop("_keruManaged", None)
 if managed:
     perms = settings.get("permissions", {})

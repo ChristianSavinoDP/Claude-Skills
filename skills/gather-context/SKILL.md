@@ -13,14 +13,14 @@ Resolve everything needed to act on a task, read-only, from whatever the user ha
 
 ## Resolve the starting point
 
-Never use WebFetch for Jira or GitHub URLs. They are authenticated; WebFetch cannot read them and it bypasses the right tool. A Jira/GitHub URL is just a carrier for an identifier: extract the id and use the `jira` / `gh` CLIs below.
+Jira and GitHub are reached only through the installed `jira` and `gh` CLIs (authenticated, present on this machine). Do not look for an MCP server and do not use WebFetch: WebFetch cannot read authenticated Jira/GitHub content and bypasses the right tool. A URL is just a carrier for an id: extract it and use the CLIs below. If a CLI is genuinely missing or unconfigured, say so and stop; never fall back to WebFetch or guess.
 
 The input can be any of these; identify which and start there:
 
-- **Jira key** (`DBI-1234`): a ticket. No prefix? Use the default project or ask. Read it with `jira issue view`, never WebFetch.
-- **Jira URL** (`.../browse/DBI-1234`): extract the key from `/browse/`, then treat it as a Jira key (use `jira`, not WebFetch).
+- **Jira key** (`DBI-1234`): a ticket. No prefix? Use the default project or ask.
+- **Jira URL** (`.../browse/DBI-1234`): extract the key from `/browse/`, then treat it as a Jira key.
 - **Jira epic**: list its children for full scope.
-- **GitHub PR URL/number** (`github.com/<owner>/<repo>/pull/<n>`): extract owner/repo/number from the URL and read it with `gh`, never WebFetch.
+- **GitHub PR URL/number** (`github.com/<owner>/<repo>/pull/<n>`): extract owner/repo/number from the URL.
 - **A repo or file reference** (e.g. `owner/repo`, or a path in another service): read it remotely (see "Reading repos not cloned locally").
 
 ## Follow the chain (MANDATORY, not optional)

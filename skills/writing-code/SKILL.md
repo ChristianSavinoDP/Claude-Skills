@@ -5,7 +5,7 @@ description: Implement a code change following the user's Playbook rules. Use wh
 
 # Writing Code
 
-Procedure for implementing a code change. The rules (DRY, comments only when warranted, tests only if requested, clean related cruft now instead of leaving a follow-up) live in the Playbook under "Writing Code" and "Shared Standards"; apply them, do not restate them.
+Procedure for implementing a code change. The rules (DRY, comments only when warranted, unit tests for non-trivial new logic, clean related cruft now instead of leaving a follow-up) live in the Playbook under "Writing Code" and "Shared Standards"; apply them, do not restate them.
 
 ## Before coding
 
@@ -14,7 +14,7 @@ Procedure for implementing a code change. The rules (DRY, comments only when war
 
 ## While coding
 
-Apply the Playbook's "Writing Code" and "Shared Standards" sections in full: stay in scope but clean related cruft now, reuse existing packages and follow the reference code's reusable shape, no needless comments, never fabricate APIs, tests only if asked, write file contents with Write/Edit (not `cat >`), and never discard uncommitted work on your own. Those are the rules; do not restate them.
+Apply the Playbook's "Writing Code" and "Shared Standards" sections in full: stay in scope but clean related cruft now, reuse existing packages and follow the reference code's reusable shape, no needless comments, never fabricate APIs, add unit tests for non-trivial new logic following the repo's pattern (per the Playbook's tests rule), write file contents with Write/Edit (not `cat >`), and never discard uncommitted work on your own. Those are the rules; do not restate them.
 
 The procedure on top of those rules:
 
@@ -23,6 +23,6 @@ The procedure on top of those rules:
 
 ## Before delivering
 
-Review every changed line: nil safety, error handling, unused imports, correct types and field names, missing returns. Re-read the relevant code once more if unsure. Confirm the change satisfies the acceptance criteria and nothing beyond them.
+Run the Playbook's "Maximum detail" self-review gate: re-read the full diff as a strict reviewer (Copilot included) would, fix anything they could flag before delivering, paying special attention to bugs that compile but fail at runtime (struct tags/`omitempty`, config parsed at runtime, nil, edge cases). Confirm the change satisfies the acceptance criteria and nothing beyond them.
 
 Do not end by offering to commit or push the change (see the Playbook's "Never offer to commit or push"). Stop after the work is done; the user will ask if they want a commit.

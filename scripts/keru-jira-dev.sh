@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Read-only: fetch a Jira issue's Development panel (linked PRs, branches,
 # repositories) via the dev-status endpoint, which jira-cli does not expose.
-# Usage: jira-dev.sh <ISSUE-KEY>
+# Usage: keru-jira-dev <ISSUE-KEY>
 # Only does authenticated GETs against /rest/dev-status. No writes, no other
 # endpoints. Reads creds from JIRA_API_TOKEN and ~/.config/.jira/.config.yml.
 set -euo pipefail
 
 KEY="${1:-}"
 if [ -z "$KEY" ]; then
-  echo "usage: jira-dev.sh <ISSUE-KEY>" >&2
+  echo "usage: keru-jira-dev <ISSUE-KEY>" >&2
   exit 2
 fi
 # Reject anything that is not a plain issue key (e.g. ABC-123): no flags,

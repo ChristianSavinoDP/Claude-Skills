@@ -34,7 +34,7 @@ read DBI-1458
 | Draft a ticket | `/keru-writing-tickets` | a short description |
 | Just gather context | `/keru-gather-context` | a key, URL, PR, or repo |
 
-**What is safe.** Read commands and local file edits run without prompting. State-changing actions always ask first: `git commit`/`push`, `terraform apply`, PR merges, ticket writes, and discarding uncommitted work (`git reset --hard`, `checkout --`, `restore`, `clean`). `make`, `mise`, and `go tool` are inspected by a hook before running, so a hidden destructive target prompts you. Details in [docs/permissions.md](docs/permissions.md).
+**What is safe.** Read commands and local file edits run without prompting. State-changing actions always ask first: `git commit`/`push`, `terraform apply`, PR merges, ticket writes, and discarding uncommitted work (`git reset --hard`, `checkout --`, `restore`, `clean`). `make`, `mise`, and `go tool` are inspected by a hook before running, so a hidden destructive target prompts you. Jira and GitHub always go through the `jira`/`gh` CLIs; a hook blocks WebFetch to those domains. Details in [docs/permissions.md](docs/permissions.md).
 
 ## Changing how Claude works
 
@@ -46,6 +46,6 @@ Edit the rule in [`playbook/PLAYBOOK.md`](playbook/PLAYBOOK.md), or the relevant
 - [playbook.md](docs/playbook.md): the rules, and how they load into every session.
 - [skills.md](docs/skills.md): how skills trigger, and the catalogue.
 - [commands.md](docs/commands.md): invoking commands vs letting skills fire.
-- [permissions.md](docs/permissions.md): the permission model and the make/mise hook.
+- [permissions.md](docs/permissions.md): the permission model and the hooks (make/mise/go-tool guard, read-only pipeline, WebFetch block).
 - [tools.md](docs/tools.md): `gh` and `jira` setup, and how context is gathered.
 - [architecture.md](docs/architecture.md): the single-source-of-truth design.

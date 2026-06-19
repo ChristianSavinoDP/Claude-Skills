@@ -57,6 +57,10 @@ Trade-off: it adds a few seconds to each `make`/`mise`/`go tool` call. That is t
 
 Allow rules match each subcommand of a compound command independently, so a read-only exploration like `cd x && grep ... | grep -v ...` can still prompt when one piece does not cleanly match. A second `PreToolUse` hook (`keru-safe-read`, a fast deterministic script, not an agent) handles that: it parses the command with shell-aware tokenizing (handling pipelines, loops, conditionals, safe redirections like `2>/dev/null`, and command substitution whose contents are themselves read-only) and auto-approves it only if every segment is a known read-only command (`grep`, `find`, `sed`, `awk`, `cat`, `ls`, `git log/diff/status`, `go list/env`, `gh` read subcommands, `base64`, ...) with no dangerous flags (`-i`, `-exec`, `-delete`), no file redirection, and no arbitrary interpreter (`python3 -c`, `ruby -e`). Anything it cannot prove safe it leaves alone, deferring to the normal allow/ask flow. It never blocks.
 
+## The WebFetch guard
+
+A `PreToolUse` hook on `WebFetch` (`keru-block-webfetch`) denies any fetch to a Jira (`*.atlassian.net`) or GitHub URL and tells Claude to use the `jira` / `gh` CLI instead. Those systems are authenticated (WebFetch cannot read them) and have a proper CLI. This is a mechanical backstop for the playbook's "Jira and GitHub: always the CLI, never WebFetch" rule: the deny does not depend on Claude remembering it. Other URLs are unaffected.
+
 ## Changing it
 
 Edit `config/permissions.json` or `config/hooks.json`, then re-run `scripts/install.sh`. The installer syncs: it tracks the rules and hooks it manages (under a `_keruManaged` marker in the settings), so each run adds what is new and removes what you dropped from config, while leaving rules you added elsewhere untouched (including the playbook's `SessionStart` hook). Changes apply to new sessions.

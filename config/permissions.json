@@ -3,7 +3,6 @@
     "defaultMode": "acceptEdits",
     "allow": [
       "Edit(.claude/**)",
-      "Edit(//Users/mac9/.claude/**)",
       "Bash(cd *)",
       "Bash(ls *)",
       "Bash(pwd)",

@@ -2,9 +2,11 @@
 """PreToolUse hook: auto-approve read-only Bash pipelines.
 
 Reads the tool-call JSON on stdin. If the Bash command is composed entirely of
-known read-only commands (grep, find, sed, awk, cat, ls, git log/diff, ...) with
-no dangerous flags, no redirection, and no command substitution, it returns a
-PreToolUse "allow" decision so compound read-only pipelines do not prompt.
+known read-only commands (grep, find, sed, awk, cat, ls, git log/diff, gh read
+subcommands, ...) with no dangerous flags and no file redirection, it returns a
+PreToolUse "allow" decision so compound read-only pipelines do not prompt. It
+parses pipelines, loops, conditionals, safe redirections (2>/dev/null, 2>&1),
+and command substitution whose contents are themselves read-only.
 
 Fail-open: on any doubt it prints nothing and exits 0, deferring to the normal
 permission flow (allow/ask/defaultMode). It never blocks anything.
@@ -58,7 +60,6 @@ GH_READONLY = {
 # `sed --in-place=.x` all count. `find` write actions are exact tokens.
 DANGEROUS_FLAG_TOKENS = {"-exec", "-execdir", "-delete", "-fprint", "-fprintf",
                         "-fprint0"}
-DANGEROUS_FLAG_PREFIXES = ("-i", "--in-place")  # sed/perl in-place edit
 
 
 def _is_dangerous_flag(tok: str) -> bool:

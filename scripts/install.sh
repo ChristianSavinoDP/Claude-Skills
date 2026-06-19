@@ -104,6 +104,13 @@ hooks_frag.setdefault("SessionStart", []).append({
     "hooks": [{"type": "command", "command": "cat " + playbook + " 2>/dev/null"}]
 })
 
+# Allow editing the global ~/.claude tree (skills/config live there as
+# symlinks) without a prompt, resolved to this machine's absolute home so no
+# user-specific path sits in the committed config. The relative Edit(.claude/**)
+# in permissions.json covers the per-repo case; this covers the global one.
+home_claude = os.path.expanduser("~/.claude")
+perms_frag.setdefault("allow", []).append("Edit(//%s/**)" % home_claude.lstrip("/"))
+
 # Track what this installer manages, so each run SYNCS (adds new, removes
 # rules/hooks dropped from config) without touching anything added elsewhere.
 prev = settings.get("_keruManaged", {})
@@ -178,7 +185,8 @@ install_helpers() {
   mkdir -p "$BIN_DIR"
   install -m 0755 "$REPO_DIR/scripts/keru-jira-dev.sh" "$BIN_DIR/keru-jira-dev"
   install -m 0755 "$REPO_DIR/scripts/keru-safe-read.py" "$BIN_DIR/keru-safe-read"
-  echo "installed: $BIN_DIR/keru-jira-dev, $BIN_DIR/keru-safe-read"
+  install -m 0755 "$REPO_DIR/scripts/keru-block-webfetch.py" "$BIN_DIR/keru-block-webfetch"
+  echo "installed: keru-jira-dev, keru-safe-read, keru-block-webfetch in $BIN_DIR"
   ensure_on_path
 }
 

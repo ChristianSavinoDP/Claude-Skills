@@ -31,7 +31,26 @@ Walk the diff file by file. Apply the Playbook's "PR Reviews" section:
 
 ## Output
 
-Per the Playbook's "PR Reviews > Format". Do not restate it here.
+Follow the Playbook's "PR Reviews > Format". Output the review directly in the chat (not a file, unless the user asks for one), as a one-line verdict then findings. It is NOT a prose essay, a conversation log, or sections like "Context Gathered"/"Initial Review". Each finding is exactly: a location+code reference line, the comment in a copy-pasteable fenced block, then the why. Concretely, a finding looks like this:
+
+````text
+### Blocking
+
+`internal/adapters/users/adapter.go:281`
+```go
+_, err := u.providersClient.Update(ctx, request)
+```
+
+Comment (paste into the PR):
+
+`````
+This drops the eventual-consistency retry these writes rely on. The Core->Users lag surfaces as `NotFound`, which the new transient-only policy will not retry, so the write fails immediately.
+`````
+
+Why: AC #3 asks to confirm no path relies on retrying app-level errors; this path did, and the diff removes it without confirming the window is gone.
+````
+
+Repeat one such block per finding, grouped under `### Blocking` / `### Nits` / `### Questions` (omit empty groups). The fenced block after "Comment" is the only thing the user copies to GitHub; everything else is for navigation. If everything is good, just the verdict line.
 
 ## Posting (only if asked)
 
