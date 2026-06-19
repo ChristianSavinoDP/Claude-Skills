@@ -23,4 +23,13 @@ Per the Playbook's "PR Descriptions":
 
 ## Output
 
-Return the finished description as raw, copy-pasteable Markdown, not rendered prose. Put the whole thing in a single fenced code block so the user can copy it straight into GitHub. Since the description itself contains backticks and code fences, wrap it in a four-backtick fence (````) so the inner content does not break it. Output only that block, nothing after it.
+Return two separate fenced code blocks so each is easy to copy on its own. Output only these two blocks, with a one-word label before each.
+
+1. **Title.** Format: `<type>(<scope>): [DBI-XXXX] <summary>`.
+   - `<type>` is one of `feat`, `fix`, `chore`, `docs` (pick the one that fits the change; if unsure, state your guess).
+   - `<scope>` is left for the user to fill: write it literally as `<scope>` so they replace it.
+   - `[DBI-XXXX]` uses the real ticket ID.
+   - `<summary>` is a concise description of the change, written by you.
+   - Example: `feat(<scope>): [DBI-1458] disable auto-generated SDK unit tests`.
+
+2. **Description.** The body, as raw copy-pasteable Markdown following the repo template. Since it contains backticks and code fences, wrap it in a four-backtick fence (````) so the inner content does not break it.
