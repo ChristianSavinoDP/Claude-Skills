@@ -10,12 +10,13 @@ From the repo root:
 scripts/install.sh
 ```
 
-The installer is idempotent (safe to re-run) and never overwrites a real, non-symlink file. It does four things:
+The installer is idempotent (safe to re-run) and never overwrites a real, non-symlink file. It does five things:
 
 1. Symlinks each `skills/<name>/` and `commands/*.md` into `~/.claude`.
 2. Prunes symlinks whose source was deleted from the repo.
-3. Merges `config/` (permissions and hooks) into the global `~/.claude/settings.json`, preserving what is already there (a `.bak` is written first).
-4. Checks the external tools (`gh`, `jira`): installs missing ones via Homebrew, validates auth, and prints the exact setup command for anything that needs interactive configuration.
+3. Merges `config/` (permissions and hooks) into the global `~/.claude/settings.json`, plus the playbook `SessionStart` hook generated with this machine's repo path, preserving what is already there (a `.bak` is written first).
+4. Installs the `keru-*` helper scripts into `~/.local/bin` and adds it to PATH if missing.
+5. Checks the external tools (`gh`, `jira`): installs missing ones via Homebrew, validates auth, and prints the exact setup command for anything that needs interactive configuration.
 
 Restart Claude Code sessions afterward. Skills, commands, permissions, and hooks are loaded at session start, so changes apply to new sessions, not the current one.
 

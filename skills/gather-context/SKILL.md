@@ -5,7 +5,7 @@ description: Gather read-only context for a task from any starting point: a Jira
 
 # Gather Context
 
-Resolve everything needed to act on a task, read-only, from whatever the user hands you. Apply the Playbook's "First Step": get the ticket, then follow its chain of context before doing anything. This skill is the *how*; the rule is in the Playbook.
+Resolve everything needed to act on a task, read-only, from whatever the user hands you. Apply the Playbook's "First Step": get the ticket, then follow its chain of context before doing anything. This skill is the *how*; the rule is in the Playbook. The Playbook's "Shared Standards" apply throughout (read-only by default, never fabricate, verify do not assert).
 
 ## Prerequisite
 
@@ -13,12 +13,14 @@ Resolve everything needed to act on a task, read-only, from whatever the user ha
 
 ## Resolve the starting point
 
+Never use WebFetch for Jira or GitHub URLs. They are authenticated; WebFetch cannot read them and it bypasses the right tool. A Jira/GitHub URL is just a carrier for an identifier: extract the id and use the `jira` / `gh` CLIs below.
+
 The input can be any of these; identify which and start there:
 
-- **Jira key** (`DBI-1234`): a ticket. No prefix? Use the default project or ask.
-- **Jira URL** (`.../browse/DBI-1234`): extract the key from `/browse/`.
+- **Jira key** (`DBI-1234`): a ticket. No prefix? Use the default project or ask. Read it with `jira issue view`, never WebFetch.
+- **Jira URL** (`.../browse/DBI-1234`): extract the key from `/browse/`, then treat it as a Jira key (use `jira`, not WebFetch).
 - **Jira epic**: list its children for full scope.
-- **GitHub PR URL/number**: read the PR.
+- **GitHub PR URL/number** (`github.com/<owner>/<repo>/pull/<n>`): extract owner/repo/number from the URL and read it with `gh`, never WebFetch.
 - **A repo or file reference** (e.g. `owner/repo`, or a path in another service): read it remotely (see "Reading repos not cloned locally").
 
 ## Follow the chain (MANDATORY, not optional)

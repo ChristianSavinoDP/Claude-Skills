@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Set up this repo in Claude Code: symlink skills and commands into ~/.claude,
-# merge global permission settings, and check the external tools the skills
-# rely on (gh, jira). The repo stays the single source of truth; edits here
-# take effect everywhere. Re-runnable (idempotent).
+# merge global permission settings and hooks (including the playbook
+# SessionStart hook, generated with this machine's repo path), install the
+# keru-* helpers onto PATH, and check the external tools (gh, jira). The repo
+# stays the single source of truth; edits here take effect everywhere.
+# Re-runnable (idempotent).
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -64,11 +66,11 @@ prune_dangling() {
   done
 }
 
-# Merge config/permissions.json and config/hooks.json into the global
-# ~/.claude/settings.json. Sets defaultMode, unions the allow/ask/deny lists,
-# and unions hook groups by event+matcher, all without touching anything else
-# (e.g. an existing SessionStart hook is preserved). Idempotent: re-running
-# does not duplicate rules or hooks. Backs up the settings first. Needs python3.
+# Merge config/permissions.json and config/hooks.json (plus the generated
+# playbook SessionStart hook) into the global ~/.claude/settings.json. Sets
+# defaultMode, syncs the allow/ask/deny lists and hook groups against the
+# _keruManaged marker (adds new, removes dropped), without touching rules or
+# hooks added elsewhere. Idempotent. Backs up the settings first. Needs python3.
 merge_config() {
   local perms="$REPO_DIR/config/permissions.json" hooks="$REPO_DIR/config/hooks.json"
   local settings="$CLAUDE_DIR/settings.json"
@@ -76,9 +78,9 @@ merge_config() {
   command -v python3 >/dev/null 2>&1 || { echo "skip: python3 not found, cannot merge config"; return 0; }
   mkdir -p "$CLAUDE_DIR"
   [ -f "$settings" ] && cp "$settings" "$settings.bak"
-  python3 - "$settings" "$perms" "$hooks" <<'PY'
+  python3 - "$settings" "$perms" "$hooks" "$REPO_DIR" <<'PY'
 import json, sys, os
-settings_path, perms_path, hooks_path = sys.argv[1], sys.argv[2], sys.argv[3]
+settings_path, perms_path, hooks_path, repo_dir = sys.argv[1:5]
 
 def load(path):
     if path and os.path.exists(path):
@@ -86,9 +88,21 @@ def load(path):
             return json.load(f)
     return {}
 
-settings = load(settings_path)
+try:
+    settings = load(settings_path)
+except (ValueError, OSError) as e:
+    print("skip: cannot parse %s (%s); leaving settings untouched" % (settings_path, e))
+    sys.exit(0)
 perms_frag = load(perms_path).get("permissions", {})
 hooks_frag = load(hooks_path).get("hooks", {})
+
+# Inject the playbook SessionStart hook with this machine's repo path resolved
+# at runtime, so no absolute path is hardcoded in the committed config. Managed
+# like every other hook (synced in, removed on uninstall).
+playbook = os.path.join(repo_dir, "playbook", "PLAYBOOK.md")
+hooks_frag.setdefault("SessionStart", []).append({
+    "hooks": [{"type": "command", "command": "cat " + playbook + " 2>/dev/null"}]
+})
 
 # Track what this installer manages, so each run SYNCS (adds new, removes
 # rules/hooks dropped from config) without touching anything added elsewhere.
@@ -139,7 +153,10 @@ for event, matcher, h in want_hooks:
     groups = hooks.setdefault(event, [])
     target = next((g for g in groups if g.get("matcher") == matcher), None)
     if target is None:
-        groups.append({"matcher": matcher, "hooks": [h]})
+        new_group = {"hooks": [h]}
+        if matcher is not None:
+            new_group["matcher"] = matcher
+        groups.append(new_group)
     elif h not in target.setdefault("hooks", []):
         target["hooks"].append(h)
 managed["hooks"] = [[e, json.dumps(h, sort_keys=True)] for e, _, h in want_hooks]
@@ -218,7 +235,7 @@ check_tools() {
     fi
   else
     TOOLS_OK=0
-    echo "action: gh not installed and brew unavailable. See README > Tools."
+    echo "action: gh not installed and brew unavailable. See docs/tools.md."
   fi
 
   # Jira CLI: needed by the gather-context skill.
@@ -234,7 +251,7 @@ check_tools() {
     fi
   else
     TOOLS_OK=0
-    echo "action: jira not installed and brew unavailable. See README > Tools."
+    echo "action: jira not installed and brew unavailable. See docs/tools.md."
   fi
 }
 

@@ -5,7 +5,7 @@ description: Produce an investigation deliverable (architecture doc, flow diagra
 
 # Investigation
 
-Procedure for investigation tickets, which produce markdown. The writing rules (self-contained, answer every acceptance criterion organically, sources at the end, pass markdownlint) live in the Playbook under "Investigations"; this skill is the *how*. Apply them, do not restate them.
+Procedure for investigation tickets, which produce markdown. The writing rules live in the Playbook under "Investigations"; this skill is the *how*. Apply them, do not restate them. The Playbook's "Shared Standards" apply throughout (concise, no AI slop, verify do not assert, never fabricate).
 
 ## Before starting
 
@@ -17,19 +17,15 @@ Per the Playbook's "Investigations > Before Starting":
 
 ## Researching
 
-- Read the relevant code and docs directly. Never fabricate APIs, signatures, or behavior, per the Playbook's "Never fabricate" rule. If context lives in another repo or dependency, search locally, then fetch (GitHub CLI, `go doc`, etc.), then ask. Do not guess.
-- Track each claim back to evidence you can cite.
+Per the Playbook's "Never fabricate" and "Verify, do not assert": read the relevant code and docs directly, and track each claim back to evidence you can cite. If context lives in another repo or dependency, search locally, then fetch (GitHub CLI, `go doc`, etc.), then ask. Do not guess.
 
 ## Writing
 
-Apply the Playbook's "Investigations > Writing Rules":
+Apply the Playbook's "Investigations > Writing Rules" in full (self-contained, answer every criterion organically, sources at the end, pass markdownlint), plus "No AI slop" (open with the finding, organize by question, no filler). Those are the rules; do not restate them. The procedure on top:
 
-- Self-contained: readable without the ticket.
-- Answer every acceptance-criteria bullet, presented organically, not as a checklist.
-- Avoid the "term - definition" pattern; use proper sentences or sections.
-- Put sources in a section at the end.
-- Pass markdownlint: proper heading hierarchy, fenced code blocks with a language, no trailing spaces.
+- Organize the document by the question being answered, with real headings a reader can scan; one heading per acceptance criterion or finding.
+- State each conclusion plainly with its evidence inline or cited, not hedged.
 
 ## Before delivering
 
-Confirm every acceptance criterion is answered and every conclusion is backed by evidence. Diagrams must match the described behavior.
+Confirm every acceptance criterion is answered and every conclusion is backed by evidence you actually checked (Playbook: "Verify, do not assert"). Diagrams must match the described behavior. Re-read once to cut filler.

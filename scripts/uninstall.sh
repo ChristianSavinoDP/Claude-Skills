@@ -4,9 +4,9 @@
 # helper scripts it installed. Idempotent.
 #
 # Intentionally does NOT touch: secrets (e.g. JIRA_API_TOKEN in settings env),
-# the playbook's SessionStart hook (configured by hand, not by the installer),
-# permission rules you added elsewhere, or your shell PATH line. Those are
-# reported at the end so you can remove them yourself if you want.
+# permission rules you added elsewhere, or permissions.defaultMode (its prior
+# value was not recorded). Those are reported at the end. Everything the
+# installer manages, including the playbook SessionStart hook, is removed.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -35,8 +35,12 @@ unmerge_config() {
   python3 - "$settings" <<'PY'
 import json, sys
 settings_path = sys.argv[1]
-with open(settings_path) as f:
-    settings = json.load(f)
+try:
+    with open(settings_path) as f:
+        settings = json.load(f)
+except (ValueError, OSError) as e:
+    print("skip: cannot parse %s (%s); leaving settings untouched" % (settings_path, e))
+    sys.exit(0)
 
 managed = settings.pop("_keruManaged", None)
 if managed:
@@ -116,5 +120,4 @@ echo "Done. Restart Claude Code sessions to apply."
 echo ""
 echo "Left in place on purpose (remove by hand if you want):"
 echo "  - JIRA_API_TOKEN in $CLAUDE_DIR/settings.json (env)"
-echo "  - the playbook SessionStart hook in $CLAUDE_DIR/settings.json"
 echo "  - permissions.defaultMode (its prior value was not recorded)"

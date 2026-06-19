@@ -5,7 +5,7 @@ description: Resolve review comments on a PR following the user's Playbook rules
 
 # Addressing PR Comments
 
-Procedure for working through review comments. The rules (validate first, push back when warranted, fix root cause, do not over-correct) live in the Playbook under "Addressing PR Comments"; this skill is the *how*. Apply the rules, do not restate them.
+Procedure for working through review comments. The rules (validate first, push back when warranted, fix root cause, do not over-correct) live in the Playbook under "Addressing PR Comments"; this skill is the *how*. Apply the rules, do not restate them. The Playbook's "Shared Standards" apply throughout (concise, no AI slop, never fabricate).
 
 ## Before changing anything
 
@@ -14,14 +14,8 @@ Procedure for working through review comments. The rules (validate first, push b
 
 ## For each comment
 
-Follow the Playbook's "Addressing PR Comments" section:
-
-- **Validate first.** Decide whether the comment is correct and in scope before writing code. Not every comment deserves a change.
-- **Push back when warranted.** If a comment is wrong or out of scope, draft a respectful reply explaining why instead of applying it.
-- **Fix the root cause**, not a band-aid that just silences the comment.
-- **Group related comments** that point at the same underlying issue.
-- **Do not over-correct.** Change what was asked, nothing more.
+Apply the Playbook's "Addressing PR Comments" section in full (validate first, push back when warranted in the rebuttal tone, fix the root cause, group related comments, do not over-correct). Those are the rules; do not restate them. Work through the comments one at a time, deciding apply-or-push-back for each before touching code.
 
 ## Output
 
-For each comment, state: apply or push back, the reasoning, and the concrete change or the drafted reply. Keep replies in the Playbook's suggestion tone.
+Per the Playbook's "Addressing PR Comments" output rules. Do not restate them here.

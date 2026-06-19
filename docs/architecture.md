@@ -19,8 +19,9 @@ CLAUDE.md              auto-loaded by Claude Code inside this repo
 skills/<name>/SKILL.md one folder per skill (model-invoked)
 commands/<name>.md     reusable slash commands (thin wrappers over skills)
 config/permissions.json global permission rules
-config/hooks.json      global hooks (the make/mise guard)
+config/hooks.json      global hooks (make/mise/go-tool guard + read-only pipeline)
 scripts/install.sh     the single setup entry point
+scripts/keru-*         helper scripts installed onto PATH
 docs/                  this documentation
 ```
 
@@ -30,8 +31,8 @@ Organized by type, not by project: each type has a distinct format and a distinc
 
 - **Skills and commands:** symlinked into `~/.claude`. Editing a file in the repo changes the active copy instantly; only new files need a re-run of the installer, and deleted ones are pruned.
 - **Settings (permissions, hooks):** synced into `~/.claude/settings.json`. The installer sets `defaultMode` and tracks the rules/hooks it manages, so each run adds new ones and removes ones dropped from config, preserving anything added elsewhere.
-- **Helper scripts:** `scripts/keru-*.sh` are installed into `~/.local/bin` under stable names (e.g. `keru-jira-dev`) and allowlisted by bare command name, so the rules stay portable across machines.
-- **Playbook:** loaded via a `SessionStart` hook and a symlink (see [playbook.md](playbook.md)).
+- **Helper scripts:** `scripts/keru-*` are installed into `~/.local/bin` under stable names (`keru-jira-dev` for the Jira dev-panel, `keru-safe-read` for the read-only pipeline hook) and referenced by name or via `~/.local/bin`, so the rules stay portable across machines. The installer also adds `~/.local/bin` to the shell profile if missing.
+- **Playbook:** loaded via a global `SessionStart` hook that the installer generates with this machine's repo path and merges into the settings (see [playbook.md](playbook.md)).
 
 ## Single source of truth, in practice
 

@@ -5,7 +5,7 @@ description: Write a PR description following the user's Playbook rules and the 
 
 # PR Description
 
-Procedure for writing a PR description. The rules live in the Playbook under "PR Descriptions"; apply them, do not restate them.
+Procedure for writing a PR description. The rules live in the Playbook under "PR Descriptions"; apply them, do not restate them. The Playbook's "Shared Standards" apply throughout (concise, no AI slop, verify do not assert, never fabricate).
 
 ## Steps
 
@@ -15,21 +15,8 @@ Procedure for writing a PR description. The rules live in the Playbook under "PR
 
 ## Filling it in
 
-Per the Playbook's "PR Descriptions":
-
-- Replace the `DBI-XXXX` placeholder with the real ticket ID.
-- "What Changed" describes the actual code, concisely.
-- "How to Test" only if there are meaningful manual steps (new endpoints, UI, specific scenarios). If it is purely internal logic covered by automated tests, write "Covered by unit/integration tests" or remove the section. Do not fabricate test steps.
+Apply the Playbook's "PR Descriptions" section in full (real ticket ID, describe the actual code concisely, "How to Test" only when there are meaningful manual steps). Those are the rules; do not restate them. Base the content on the real diff you inspected, not the theory.
 
 ## Output
 
-Return two separate fenced code blocks so each is easy to copy on its own. Output only these two blocks, with a one-word label before each.
-
-1. **Title.** Format: `<type>(<scope>): [DBI-XXXX] <summary>`.
-   - `<type>` is one of `feat`, `fix`, `chore`, `docs` (pick the one that fits the change; if unsure, state your guess).
-   - `<scope>` is left for the user to fill: write it literally as `<scope>` so they replace it.
-   - `[DBI-XXXX]` uses the real ticket ID.
-   - `<summary>` is a concise description of the change, written by you.
-   - Example: `feat(<scope>): [DBI-1458] disable auto-generated SDK unit tests`.
-
-2. **Description.** The body, as raw copy-pasteable Markdown following the repo template. Since it contains backticks and code fences, wrap it in a four-backtick fence (````) so the inner content does not break it.
+Per the Playbook's "PR Descriptions" format (title block + copy-pasteable body block). Do not restate it here.

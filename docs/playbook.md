@@ -6,11 +6,11 @@
 
 The playbook is wired into every context so Claude never works without it:
 
-1. **Any session, any project.** A global `SessionStart` hook (`~/.claude/settings.json`) cats `playbook/PLAYBOOK.md` from this repo at every session start.
+1. **Any session, any project.** A global `SessionStart` hook in `~/.claude/settings.json` cats `playbook/PLAYBOOK.md` at every session start. The installer generates this hook with the machine's actual repo path (so no absolute path is hardcoded in the committed config) and merges it in; `uninstall.sh` removes it.
 2. **Working in this repo.** `CLAUDE.md` at the repo root points at it and is auto-loaded by Claude Code.
 3. **Persistent memory.** A memory entry records this repo as the canonical config.
 
-To keep one copy, `~/Documents/Claude/PLAYBOOK.md` is a symlink to the version in this repo.
+The installer wires all of this automatically; nothing here needs manual setup.
 
 ## Rule vs procedure
 

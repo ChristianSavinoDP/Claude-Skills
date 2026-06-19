@@ -5,7 +5,7 @@ description: Review a pull request following the user's Playbook review rules. U
 
 # PR Review
 
-Procedure for reviewing a PR. The review *rules* (tone, comment categories, decision flow, what not to do) live in the Playbook under "PR Reviews"; this skill is the *how*. Do not restate the rules here, apply them.
+Procedure for reviewing a PR. The review *rules* (tone, comment categories, decision flow, what not to do) live in the Playbook under "PR Reviews"; this skill is the *how*. Do not restate the rules here, apply them. The Playbook's "Shared Standards" apply throughout (concise, no AI slop, verify do not assert, never fabricate).
 
 ## Before reviewing
 
@@ -26,12 +26,12 @@ Walk the diff file by file. Apply the Playbook's "PR Reviews" section:
 - Classify each finding as blocking, nit, or question, per the Playbook.
 - Use the Playbook's decision flow to decide whether each observation is worth a comment.
 - Scope rules differ by ticket type (follow-up: resolve everything here; feature: refactors valid). Confirm the type from the ticket.
+- Per the Playbook's "Verify, do not assert": check claims yourself before repeating them. Run `gh pr checks <pr>` for CI, grep the repo for removed symbols. The PR description is the author's claim, not evidence.
+- Per the Playbook's "Do not silently drop existing behavior": an unconfirmed behavioral regression is a blocking finding, even if the author flagged it in the description.
 
 ## Output
 
-- Use the Playbook's comment format: file path with line reference, code block, then the suggestion.
-- Frame as suggestions, not imperatives.
-- If everything is good, just approve. Do not comment to show you reviewed it.
+Per the Playbook's "PR Reviews > Format". Do not restate it here.
 
 ## Posting (only if asked)
 

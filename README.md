@@ -34,7 +34,7 @@ read DBI-1458
 | Draft a ticket | `/keru-writing-tickets` | a short description |
 | Just gather context | `/keru-gather-context` | a key, URL, PR, or repo |
 
-**What is safe.** Read commands and edits run without prompting; state-changing ones (`git commit`/`push`, `terraform apply`, PR merges, ticket writes) always ask first. `make`/`mise` are checked before running, so a hidden destructive target prompts you. Details in [docs/permissions.md](docs/permissions.md).
+**What is safe.** Read commands and local file edits run without prompting. State-changing actions always ask first: `git commit`/`push`, `terraform apply`, PR merges, ticket writes, and discarding uncommitted work (`git reset --hard`, `checkout --`, `restore`, `clean`). `make`, `mise`, and `go tool` are inspected by a hook before running, so a hidden destructive target prompts you. Details in [docs/permissions.md](docs/permissions.md).
 
 ## Changing how Claude works
 
