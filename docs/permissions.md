@@ -49,6 +49,10 @@ Before a `make`/`mise` command runs, the hook reads the Makefile or mise config,
 
 Trade-off: it adds a few seconds to each `make`/`mise` call. That is the cost of keeping those allow rules broad with a real safety net.
 
+## The read-only pipeline hook
+
+Allow rules match each subcommand of a compound command independently, so a read-only exploration like `cd x && grep ... | grep -v ...` can still prompt when one piece does not cleanly match. A second `PreToolUse` hook (`keru-safe-read`, a fast deterministic script, not an agent) handles that: it parses the command with shell-aware tokenizing and auto-approves it only if every segment is a known read-only command (`grep`, `find`, `sed`, `awk`, `cat`, `ls`, `git log/diff/status`, ...) with no dangerous flags (`-i`, `-exec`, `-delete`), no redirection, and no command substitution. Anything it cannot prove safe it leaves alone, deferring to the normal allow/ask flow. It never blocks.
+
 ## Changing it
 
 Edit `config/permissions.json` or `config/hooks.json`, then re-run `scripts/install.sh`. The installer syncs: it tracks the rules and hooks it manages (under a `_keruManaged` marker in the settings), so each run adds what is new and removes what you dropped from config, while leaving rules you added elsewhere untouched (including the playbook's `SessionStart` hook). Changes apply to new sessions.

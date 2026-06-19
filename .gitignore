@@ -2,3 +2,7 @@
 *.pre-symlink.bak
 .DS_Store
 .claude/settings.local.json
+
+# Python artifacts (from helper scripts)
+__pycache__/
+*.pyc

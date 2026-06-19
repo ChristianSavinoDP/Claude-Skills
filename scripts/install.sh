@@ -160,7 +160,8 @@ BIN_DIR="$HOME/.local/bin"
 install_helpers() {
   mkdir -p "$BIN_DIR"
   install -m 0755 "$REPO_DIR/scripts/keru-jira-dev.sh" "$BIN_DIR/keru-jira-dev"
-  echo "installed: $BIN_DIR/keru-jira-dev"
+  install -m 0755 "$REPO_DIR/scripts/keru-safe-read.py" "$BIN_DIR/keru-safe-read"
+  echo "installed: $BIN_DIR/keru-jira-dev, $BIN_DIR/keru-safe-read"
   ensure_on_path
 }
 

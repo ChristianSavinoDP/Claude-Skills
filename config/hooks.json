@@ -5,6 +5,11 @@
         "matcher": "Bash",
         "hooks": [
           {
+            "type": "command",
+            "command": "~/.local/bin/keru-safe-read",
+            "timeout": 10
+          },
+          {
             "type": "agent",
             "if": "Bash(make *)",
             "statusMessage": "Checking make target for destructive operations...",

@@ -42,8 +42,10 @@ These apply everywhere: code, investigations, PR descriptions, reviews, tickets.
 ## Writing Code
 
 - **No comments unless warranted.** Only when the "why" is non-obvious.
+- **Reuse existing packages.** If a package, helper, or utility already exists for what you need, use it; do not write a parallel implementation.
+- **Follow the reference code's reusable shape.** When you model new code on existing code, match how that reference is structured. If the reference lives in a shared package or helper meant to be reused, write yours the same way (in that package, or a sibling reusable one), not as an inline copy buried in a single caller. If the reference is reusable, what you build from it should be too.
 - **Tests:** no redundancy, each test covers a distinct behavior. Only write tests if requested.
-- **Refactoring:** if it goes beyond the ticket scope, suggest a follow-up ticket. Exception: trivially small changes (rename, extract a one-liner) can stay.
+- **Prefer cleaning up now over leaving a follow-up.** The goal is to avoid follow-up tickets. If you touch code that has related cruft (dead config, unused fields, a duplicated helper, a stale reference), clean it in the same PR. Reserve a follow-up only for something large and genuinely unrelated to the change. Trivially small cleanups (rename, extract a one-liner) always stay. This narrows "stay within scope": related cleanup is in scope, an unrelated rewrite is not.
 
 ---
 
