@@ -11,6 +11,8 @@ Both run the same flows; the difference is who triggers them.
 | **Skill** | Claude, when your request matches its `description` | you describe a task and want the right flow to fire on its own |
 | **Command** | you, by typing `/keru-name` | you want to invoke a flow deliberately, with arguments |
 
+The command is optional. The skill is supposed to fire on a plain-language request that matches it; the command just makes it explicit and lets you pass arguments. If a task matches a skill, the skill applies whether or not you used the command (see the playbook's "Load the skill for the task").
+
 ## How the commands here are built
 
 Each command is a thin wrapper that invokes its matching skill with `$ARGUMENTS`. It does not duplicate the skill's procedure or the playbook's rules; it just points at the skill and states the expected input. This keeps a single source of truth: edit the skill, and both the skill trigger and the command pick up the change.

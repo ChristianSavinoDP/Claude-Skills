@@ -41,8 +41,38 @@ DEFER_KW = {"case", "esac", "function"}      # too messy to parse: defer
 GIT_READONLY_SUB = {"log", "diff", "status", "show", "branch", "blame",
                     "rev-parse", "ls-files", "describe", "checkout", "switch"}
 
-# go subcommands that only read (go env writes only with -w/-u, handled below).
-GO_READONLY_SUB = {"env", "version", "list", "vet", "doc"}
+# go subcommands that are read-only or local-reversible (fmt reformats files,
+# build/test/vet are safe). `go env -w/-u` is rejected below. `go tool` is here
+# only for the bare list form (`go tool` with no tool name); `go tool <name>`
+# runs the tool and is rejected below. `go get` fetches deps and rewrites
+# go.mod/go.sum: a network read that only writes local, git-reversible files and
+# does NOT execute the fetched code (module-aware mode), so it is local-
+# reversible, same category as `go mod download`/`tidy` already here. Excludes
+# `go run` (executes arbitrary code) and `go install` (network + installs
+# binaries onto PATH).
+GO_READONLY_SUB = {"env", "version", "list", "vet", "doc", "fmt", "build",
+                   "test", "mod", "tool", "get"}
+
+# terraform subcommands that only read or stay local. apply/destroy/import/state
+# (mutations) are NOT here; they fall through to the ask rules.
+TF_READONLY_SUB = {"fmt", "validate", "plan", "version", "show", "output",
+                   "providers", "graph", "init"}
+
+# mise subcommands that only read. Excludes run/install/use/exec/uninstall/
+# prune (those execute or mutate; they stay with the mise guard hook).
+MISE_READONLY_SUB = {"registry", "ls", "list", "current", "which", "where",
+                     "ls-remote", "version", "doctor", "env"}
+
+# jira: read-only commands. `me`, `version`, `open` are single-word; the rest
+# are `<group> <verb>` pairs. Writes (issue create/move/comment/edit/assign,
+# epic add/create, sprint add) are NOT here and fall through to the ask rules.
+JIRA_READONLY_SOLO = {"me", "version", "open"}
+JIRA_READONLY_PAIR = {
+    ("issue", "view"), ("issue", "list"),
+    ("epic", "list"),
+    ("sprint", "list"),
+    ("board", "list"),
+}
 
 # gh: only read subcommands. Writes (pr create/merge/comment, run rerun, etc.)
 # are deliberately excluded so they fall through to the ask rules.
@@ -55,17 +85,18 @@ GH_READONLY = {
     ("search",),  # gh search code/prs/...
 }
 
-# Flags that mean a segment can change state. Matched as whole tokens AND as
-# prefixes for the in-place forms, so `sed -i`, `sed -i.bak`, and
-# `sed --in-place=.x` all count. `find` write actions are exact tokens.
+# find write actions: unambiguous, only find uses them, so they are dangerous
+# on any command that bears them.
 DANGEROUS_FLAG_TOKENS = {"-exec", "-execdir", "-delete", "-fprint", "-fprintf",
                         "-fprint0"}
+# Commands where `-i` / `--in-place` means edit-the-file-in-place. For other
+# commands `-i` is harmless (e.g. grep -i is case-insensitive), so the in-place
+# check must be scoped to these, not applied globally.
+INPLACE_COMMANDS = {"sed", "gsed", "perl"}
 
 
-def _is_dangerous_flag(tok: str) -> bool:
-    if tok in DANGEROUS_FLAG_TOKENS:
-        return True
-    # In-place edit: exactly -i, or -i<suffix> like -i.bak, or --in-place[=...].
+def _is_inplace_flag(tok: str) -> bool:
+    # exactly -i, or -i<suffix> like -i.bak, or --in-place[=...].
     if tok == "-i" or tok == "--in-place":
         return True
     if tok.startswith("-i") and len(tok) > 2 and tok[2] in ".=":
@@ -92,12 +123,23 @@ def tokens_are_safe(tokens) -> bool:
         return True
     base = tokens[0].split("/")[-1]
     if base == "git":
-        sub = tokens[1] if len(tokens) > 1 else ""
+        # Skip safe global options that can precede the subcommand (e.g.
+        # `git --no-pager diff`, `git --paginate log`). Defer on global options
+        # that can change target or inject config (-C, -c, --git-dir, --work-tree).
+        rest = tokens[1:]
+        i = 0
+        while i < len(rest) and rest[i].startswith("-"):
+            if rest[i] in ("--no-pager", "--paginate", "--literal-pathspecs"):
+                i += 1
+            else:
+                return False  # -C, -c, --git-dir, etc: not provably safe
+        after = rest[i:]
+        sub = after[0] if after else ""
         if sub not in GIT_READONLY_SUB:
             return False
         # `git checkout`/`switch` changing a branch is safe, but `checkout --`,
         # `checkout .`, or `checkout <x> -- <files>` discards changes: defer it.
-        if sub in ("checkout", "switch") and ("--" in tokens[2:] or "." in tokens[2:]):
+        if sub in ("checkout", "switch") and ("--" in after[1:] or "." in after[1:]):
             return False
     elif base == "go":
         sub = tokens[1] if len(tokens) > 1 else ""
@@ -105,6 +147,40 @@ def tokens_are_safe(tokens) -> bool:
             return False
         # `go env -w` / `-u` mutate the env; defer those.
         if sub == "env" and any(a in ("-w", "-u") for a in tokens[2:]):
+            return False
+        # `go mod` is read-only only for tidy/download/verify/graph/why.
+        if sub == "mod":
+            modsub = tokens[2] if len(tokens) > 2 else ""
+            # tidy/download/verify/graph/why are safe; edit rewrites go.mod but
+            # is local and reversible. Anything else (e.g. unknown) defers.
+            if modsub not in ("tidy", "download", "verify", "graph", "why", "edit"):
+                return False
+        # `go tool` with no tool name just lists declared tools (read-only); but
+        # `go tool <name>` runs the tool (arbitrary). Approve only the bare form;
+        # the rest defers to the `Bash(go tool *)` impact-judge hook.
+        if sub == "tool":
+            if any(not a.startswith("-") for a in tokens[2:]):
+                return False
+    elif base == "terraform":
+        sub = tokens[1] if len(tokens) > 1 else ""
+        if sub not in TF_READONLY_SUB:
+            return False
+    elif base in ("command", "type", "hash"):
+        # Only the lookup forms are safe (`command -v x`, `type x`). `command x`
+        # would run x, bypassing this allowlist, so require a lookup flag for
+        # `command`. `type`/`hash` only print, never execute.
+        if base == "command" and not any(t in ("-v", "-V") for t in tokens[1:]):
+            return False
+    elif base == "mise":
+        sub = tokens[1] if len(tokens) > 1 else ""
+        # `mise exec [opts] -- <cmd>` runs <cmd> with mise's tools on PATH; it is
+        # safe iff <cmd> is. Recurse on the part after `--`.
+        if sub == "exec":
+            if "--" in tokens:
+                inner = tokens[tokens.index("--") + 1:]
+                return tokens_are_safe(inner)
+            return False  # `mise exec` without `--` is ambiguous: defer
+        if sub not in MISE_READONLY_SUB:
             return False
     elif base == "gh":
         rest = [t for t in tokens[1:] if not t.startswith("-")]
@@ -119,10 +195,19 @@ def tokens_are_safe(tokens) -> bool:
                     return False
         elif (sub1, sub2) not in GH_READONLY and (sub1,) not in GH_READONLY:
             return False
+    elif base == "jira":
+        rest = [t for t in tokens[1:] if not t.startswith("-")]
+        sub1 = rest[0] if rest else ""
+        sub2 = rest[1] if len(rest) > 1 else ""
+        if sub1 not in JIRA_READONLY_SOLO and (sub1, sub2) not in JIRA_READONLY_PAIR:
+            return False
     elif base not in READ_ONLY:
         return False
+    inplace_risky = base in INPLACE_COMMANDS
     for t in tokens[1:]:
-        if _is_dangerous_flag(t):
+        if t in DANGEROUS_FLAG_TOKENS:
+            return False
+        if inplace_risky and _is_inplace_flag(t):
             return False
     return True
 

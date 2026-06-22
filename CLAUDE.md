@@ -2,16 +2,16 @@
 
 This repo is the canonical source of truth for how I want Claude to work.
 
-**Always read and apply [`playbook/PLAYBOOK.md`](playbook/PLAYBOOK.md) in full.** It governs language, standards, code, PR descriptions, reviews, investigations, and tickets. Re-read it constantly; the user should never have to remind you of anything written there.
+**Always read and apply [`playbook/PLAYBOOK.md`](playbook/PLAYBOOK.md) in full.** It holds the always-on rules: language, the first step (get the ticket and its context), verify-don't-assume, shared standards, tools/shell, and safety. It is short on purpose. Re-read it constantly; the user should never have to remind you of anything written there.
 
-`playbook/PLAYBOOK.md` is the single source of truth. Do not duplicate its rules elsewhere; point to it.
+Task-specific rules and procedure (how to review a PR, write code, run an investigation, draft a ticket) live in the matching skill under `skills/`, loaded when that work starts, not in the playbook. Each rule lives in exactly one place: an always-on rule in the playbook, a task rule in its skill, never both.
 
 ## Vision and principles
 
 The design decisions in this repo all come from these. When extending it, keep them; if a change fights one of them, it is probably the wrong change.
 
-1. **One source of truth, enforced.** Every rule and every output format lives in exactly one place (the playbook); skills, commands, and docs reference it, never restate it. The repo applies this to itself: a change is made in one spot, not synced across copies.
-2. **Rule vs. procedure.** The playbook holds the *what* (always-on principles); skills hold the *how* (the steps to execute a task). A skill never re-lists a playbook rule; it links to it and adds only the procedure.
+1. **One source of truth, by scope.** Each rule lives in exactly one place: if it applies to every task, it is in the playbook; if it only matters for one kind of work, it lives in that task's skill. Never both. Commands and docs reference, never restate.
+2. **Small always-on context.** The playbook stays short so it is actually followed; if everything is a rule, nothing is. Task detail loads on demand via the skill, so the permanent context is not a wall no one reads.
 3. **Less friction, never less safety.** Auto-approve what is safe so work flows, but always stop for what matters. Reducing prompts is a goal; removing a real safety gate is not.
 4. **Local vs. remote is the safety line.** Local, reversible work (build, test, edit, format, delete local files) runs without asking. Anything that changes remote state, infrastructure, or data not recoverable from git (deploy, push, apply, DB writes, discarding uncommitted changes) asks first.
 5. **Use the right tool, not raw shell.** Files go through Write/Edit (diff, checkpoint, trail); authenticated systems through their CLI (`jira`/`gh`, never WebFetch); parsing through a tool's own flags, never `python3 -c`. Shell is for reading and local, reversible actions.

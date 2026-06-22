@@ -186,7 +186,9 @@ install_helpers() {
   install -m 0755 "$REPO_DIR/scripts/keru-jira-dev.sh" "$BIN_DIR/keru-jira-dev"
   install -m 0755 "$REPO_DIR/scripts/keru-safe-read.py" "$BIN_DIR/keru-safe-read"
   install -m 0755 "$REPO_DIR/scripts/keru-block-webfetch.py" "$BIN_DIR/keru-block-webfetch"
-  echo "installed: keru-jira-dev, keru-safe-read, keru-block-webfetch in $BIN_DIR"
+  install -m 0755 "$REPO_DIR/scripts/keru-block-inline-interp.py" "$BIN_DIR/keru-block-inline-interp"
+  install -m 0755 "$REPO_DIR/scripts/keru-require-skill.py" "$BIN_DIR/keru-require-skill"
+  echo "installed: keru-jira-dev, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill in $BIN_DIR"
   ensure_on_path
 }
 

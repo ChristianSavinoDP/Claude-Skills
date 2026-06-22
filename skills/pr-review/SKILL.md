@@ -1,41 +1,60 @@
 ---
 name: pr-review
-description: Review a pull request following the user's Playbook review rules. Use when the user asks to review a PR, look at a PR, or check changes on a branch before merge. Covers both code and investigation PRs.
+description: Review a pull request. Use whenever the user asks to review or look at a PR, gives a PR link/number to review, or asks to check changes on a branch before merge, with or without a slash command. Covers both code and investigation PRs.
 ---
 
 # PR Review
 
-Procedure for reviewing a PR. The review *rules* (tone, comment categories, decision flow, what not to do) live in the Playbook under "PR Reviews"; this skill is the *how*. Do not restate the rules here, apply them. The Playbook's "Shared Standards" apply throughout (concise, no AI slop, verify do not assert, never fabricate).
+Procedure for reviewing a PR. The Playbook's always-on rules apply (verify, never fabricate, concise, no slop); this skill adds the review rules. Applies to both code and investigation PRs.
 
 ## Before reviewing
 
-1. **Ask for the ticket first.** Per the Playbook's mandatory first step, do not fetch the diff or analyze anything until you have the ticket. The ticket sets the work type (feature vs follow-up vs investigation) and acceptance criteria, which change how you review.
-2. Identify the PR: ask for the PR number/URL if not given.
+1. Get the ticket and its context first (Playbook "first step"). The ticket type (feature vs follow-up vs investigation) and acceptance criteria change how you review.
+2. Identify the PR; ask for the number/URL if not given.
+3. Fetch the diff and metadata: `gh pr view <pr>` and `gh pr diff <pr>`. For an investigation PR, also check `docs/investigations/` for the expected format. Read changed files in full when behavior depends on surrounding code.
 
-## Gather context
+## Checklist
 
-- Fetch the diff and metadata with the GitHub CLI: `gh pr view <pr>` and `gh pr diff <pr>`.
-- For an investigation PR, also check `docs/investigations/` for the expected format.
-- Read the changed files in full, not just the diff hunks, when behavior depends on surrounding code.
+1. Satisfies the acceptance criteria?
+2. Compilation / test failures? Check CI yourself (`gh pr checks <pr>`); the PR description is the author's claim, not evidence.
+3. Callers updated correctly?
+4. Tests cover new public API surface?
+5. (Investigations) Conclusions supported by evidence? Diagrams accurate?
+6. Behavioral regression? Dropping behavior something depends on is blocking unless the ticket asked for it and it is verified safe to drop.
 
-## Review
+## Comment categories and scope
 
-Walk the diff file by file. Apply the Playbook's "PR Reviews" section:
+- **Blocking:** bugs, security, broken contracts, unconfirmed regressions. Request changes.
+- **Nit:** style, minor improvements. Label explicitly.
+- **Question:** genuine clarification needed.
+- Follow-up ticket: resolve everything here, do not defer. Feature ticket: refactors are valid if something is not done well. Skip only what is genuinely unrelated.
 
-- Run the Playbook checklist (acceptance criteria, compile/test failures, callers updated, test coverage, evidence for investigations).
-- Classify each finding as blocking, nit, or question, per the Playbook.
-- Use the Playbook's decision flow to decide whether each observation is worth a comment.
-- Scope rules differ by ticket type (follow-up: resolve everything here; feature: refactors valid). Confirm the type from the ticket.
-- Per the Playbook's "Verify, do not assert": check claims yourself before repeating them. Run `gh pr checks <pr>` for CI, grep the repo for removed symbols. The PR description is the author's claim, not evidence.
-- Per the Playbook's "Do not silently drop existing behavior": an unconfirmed behavioral regression is a blocking finding, even if the author flagged it in the description.
+## What NOT to do
+
+- Do not comment just to show you reviewed it.
+- Do not suggest docstrings/comments on code you did not write.
+- Do not suggest error handling for impossible scenarios.
+- Do not nitpick formatting if there is a linter.
+- Do not request scope expansion on investigation PRs.
+- If everything is good, just approve.
+
+## Decision flow
+
+```text
+Within the ticket scope?
++-- No -> Do not comment
++-- Yes -> Bug/security/broken contract/regression?
+    +-- Yes -> Blocking comment
+    +-- No -> Clear improvement, no downsides?
+        +-- Yes -> Suggest it
+        +-- No -> Skip
+```
 
 ## Output
 
-Follow the Playbook's "PR Reviews > Format". Output the review directly in the chat (not a file, unless the user asks for one), as a one-line verdict then findings. It is NOT a prose essay, a conversation log, or sections like "Context Gathered"/"Initial Review". Each finding is exactly: a location+code reference line, the comment in a copy-pasteable fenced block, then the why. Concretely, a finding looks like this:
+In the chat (not a file, unless asked), NOT a prose essay or conversation log. A one-line verdict (`Approve`, `Request changes`, or `Comment`), then findings grouped under `### Blocking` / `### Nits` / `### Questions` (omit empty groups). Each finding is exactly:
 
 ````text
-### Blocking
-
 `internal/adapters/users/adapter.go:281`
 ```go
 _, err := u.providersClient.Update(ctx, request)
@@ -44,14 +63,14 @@ _, err := u.providersClient.Update(ctx, request)
 Comment (paste into the PR):
 
 `````
-This drops the eventual-consistency retry these writes rely on. The Core->Users lag surfaces as `NotFound`, which the new transient-only policy will not retry, so the write fails immediately.
+This drops the eventual-consistency retry these writes rely on; the Core->Users lag surfaces as `NotFound`, which the transient-only policy will not retry.
 `````
 
-Why: AC #3 asks to confirm no path relies on retrying app-level errors; this path did, and the diff removes it without confirming the window is gone.
+Why: AC #3 asks to confirm no path relies on retrying app-level errors; this one did, and the diff removes it without confirming the window is gone.
 ````
 
-Repeat one such block per finding, grouped under `### Blocking` / `### Nits` / `### Questions` (omit empty groups). The fenced block after "Comment" is the only thing the user copies to GitHub; everything else is for navigation. If everything is good, just the verdict line.
+The location+code line and the "Why" are for the user to navigate; only the fenced block after "Comment" is copied to GitHub. Frame findings as suggestions on someone else's PR; state facts plainly for bugs. If everything is good, just the verdict line.
 
 ## Posting (only if asked)
 
-If the user wants comments posted rather than drafted in chat, confirm first, then use `gh pr review` / `gh pr comment`. Default to drafting in chat.
+Posting is a state change: default to drafting in chat, confirm first, then use `gh pr review` / `gh pr comment`.

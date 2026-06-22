@@ -1,6 +1,6 @@
 # Claude-Skills
 
-A guide to working with Claude the way I want: one playbook of rules, a set of task flows, and a setup that loads them into every session. This repo is the single source of truth; everything else points back to it.
+A guide to working with Claude the way I want: a short playbook of always-on rules, a set of task flows (skills) that carry the rules and steps for each kind of work, and a setup that loads them into every session. This repo is the single source of truth.
 
 ## Set up once
 
@@ -38,7 +38,7 @@ read DBI-1458
 
 ## Changing how Claude works
 
-Edit the rule in [`playbook/PLAYBOOK.md`](playbook/PLAYBOOK.md), or the relevant skill/command/config, then re-run `scripts/install.sh`. There is nothing else to sync: every consumer reads from this repo. Why it is built this way is in [docs/architecture.md](docs/architecture.md).
+Edit an always-on rule in [`playbook/PLAYBOOK.md`](playbook/PLAYBOOK.md); edit a task's rules or steps in its skill under `skills/`; then re-run `scripts/install.sh`. There is nothing else to sync: every consumer reads from this repo. Why it is built this way is in [docs/architecture.md](docs/architecture.md).
 
 ## Learn more
 
@@ -47,5 +47,5 @@ Edit the rule in [`playbook/PLAYBOOK.md`](playbook/PLAYBOOK.md), or the relevant
 - [skills.md](docs/skills.md): how skills trigger, and the catalogue.
 - [commands.md](docs/commands.md): invoking commands vs letting skills fire.
 - [permissions.md](docs/permissions.md): the permission model and the hooks (make/mise/go-tool guard, read-only pipeline, WebFetch block).
-- [tools.md](docs/tools.md): `gh` and `jira` setup, and how context is gathered.
+- [external-tools.md](docs/external-tools.md): `gh` and `jira` setup, and how context is gathered.
 - [architecture.md](docs/architecture.md): the single-source-of-truth design.

@@ -1,28 +1,39 @@
 ---
 name: writing-code
-description: Implement a code change following the user's Playbook rules. Use when the ticket asks to build, implement, fix, or change code (not review, not investigate, not docs).
+description: Implement a code change. Use whenever the task is to build, implement, fix, refactor, or change code (with or without a slash command); trigger on "implement X", "fix this", "add Y", a ticket asking for a code change. Not for reviewing, investigating, or docs.
 ---
 
 # Writing Code
 
-Procedure for implementing a code change. The rules (DRY, comments only when warranted, unit tests for non-trivial new logic, clean related cruft now instead of leaving a follow-up) live in the Playbook under "Writing Code" and "Shared Standards"; apply them, do not restate them.
+Procedure for implementing a code change. The Playbook's always-on rules still apply (verify before delivering, stay in scope, right tool not raw shell, safety); this skill adds the code-specific rules and steps.
 
 ## Before coding
 
-1. **Ask for the ticket first**, per the Playbook's mandatory first step. Scope and acceptance criteria come from it.
-2. **Read before writing.** Review the surrounding code and existing patterns so the change matches what is already there (Playbook: "Follow existing patterns", "DRY"). Reuse what exists instead of adding new.
+1. Get the ticket and its context first (Playbook "first step"). Scope and acceptance criteria come from it.
+2. Read the surrounding code and existing patterns before writing, so the change matches what is there. Reuse what exists instead of adding new.
 
-## While coding
+## Code-specific rules
 
-Apply the Playbook's "Writing Code" and "Shared Standards" sections in full: stay in scope but clean related cruft now, reuse existing packages and follow the reference code's reusable shape, no needless comments, never fabricate APIs, add unit tests for non-trivial new logic following the repo's pattern (per the Playbook's tests rule), write file contents with Write/Edit (not `cat >`), and never discard uncommitted work on your own. Those are the rules; do not restate them.
-
-The procedure on top of those rules:
-
-- Match the file's existing naming, style, and idioms (read a neighbor before writing).
-- If a revert or discard comes up, show the branch state (`git status`, `git log`, `git diff`) and wait for the user to say what to revert; do not choose what to discard yourself.
+- **No comments unless the "why" is non-obvious.**
+- **Reuse existing packages.** If a package, helper, or utility exists for what you need, use it; do not write a parallel implementation.
+- **Follow the reference code's reusable shape.** When you model new code on existing code, match how that reference is structured. If the reference lives in a shared/reusable package, write yours the same way, not as an inline copy buried in one caller.
+- **Match the file's naming, style, and idioms** (read a neighbor before writing).
+- **Tests for non-trivial new logic.** When you add logic with branches, edge cases, parsing, or anything whose failure only surfaces at runtime, add unit tests in the same PR, following the repo's existing test pattern, and tell the user you did and why. Two limits: only if the repo already tests that kind of code (do not introduce a framework where there is none), and not for trivial changes (config, rename, wiring). Each test covers a distinct behavior. If the user says no tests, skip them.
+- **Do not silently drop existing behavior.** Removing or changing behavior something may depend on (a retry, an error path, a fallback, a default) is a serious change, not a cleanup: call it out and confirm it is intended.
 
 ## Before delivering
 
-Run the Playbook's "Maximum detail" self-review gate: re-read the full diff as a strict reviewer (Copilot included) would, fix anything they could flag before delivering, paying special attention to bugs that compile but fail at runtime (struct tags/`omitempty`, config parsed at runtime, nil, edge cases). Confirm the change satisfies the acceptance criteria and nothing beyond them.
+Run the Playbook's verify gate: re-read the full diff as a strict reviewer (Copilot included) would and fix what they would flag, especially bugs that compile but fail at runtime (struct tags/`omitempty`, config parsed at runtime, nil, edge cases). Confirm the change satisfies the acceptance criteria and nothing beyond them.
 
-Do not end by offering to commit or push the change (see the Playbook's "Never offer to commit or push"). Stop after the work is done; the user will ask if they want a commit.
+### Adversarial review before delivering (non-trivial changes)
+
+For any change with real logic, infra, or CI (not a rename/config one-liner), do not rely on your own re-read alone: you are blind to your own decisions. Launch a fresh subagent reviewer over the diff, with no stake in how you wrote it. Tell it to hunt specifically for what authors miss and Copilot catches:
+
+- dead or now-unused code left beside an edit (e.g. a permission/scope still granted after its use was removed),
+- mutable or inconsistent external references (a `@main` ref where the repo pins versions),
+- checks that do not actually cover their case (e.g. `git diff --exit-code` missing untracked files),
+- behavior silently dropped, and runtime-only bugs.
+
+Then, critically: **validate each finding against the real code before acting on it.** Open the file and confirm the issue is actually present, do not accept or dismiss a finding from assumption (that is the exact failure this guards against). Apply the confirmed ones and re-review. Aim to catch what a reviewer like Copilot would, before delivering, not after.
+
+Then stop; do not offer to commit.

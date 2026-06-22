@@ -9,7 +9,7 @@ Resolve everything needed to act on a task, read-only, from whatever the user ha
 
 ## Prerequisite
 
-`jira-cli` and `gh` must be installed and authenticated (see [docs/tools.md](../../docs/tools.md)). If a CLI is missing or not configured, tell the user to run setup instead of guessing contents.
+`jira-cli` and `gh` must be installed and authenticated (see [docs/external-tools.md](../../docs/external-tools.md)). If a CLI is missing or not configured, tell the user to run setup instead of guessing contents.
 
 ## Resolve the starting point
 

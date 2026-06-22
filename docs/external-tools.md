@@ -1,4 +1,4 @@
-# Tools
+# External Tools
 
 Skills drive external tools through their CLIs, run via Bash. Each must be installed and authenticated once; credentials live with the tool, never in this repo. The installer checks both and prints an `action:` line for anything unconfigured.
 

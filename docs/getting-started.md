@@ -25,7 +25,7 @@ Restart Claude Code sessions afterward. Skills, commands, permissions, and hooks
 The installer reports `ok:` or `action:` per tool. Resolve any `action:` lines:
 
 - **GitHub:** `gh auth login`
-- **Jira:** see [tools.md](tools.md) for the token and `jira init` steps (interactive, needs a secret, so the installer cannot do it for you).
+- **Jira:** see [external-tools.md](external-tools.md) for the token and `jira init` steps (interactive, needs a secret, so the installer cannot do it for you).
 
 ## Verify
 
@@ -37,4 +37,4 @@ In a new session:
 ## See also
 
 - [architecture.md](architecture.md): how the repo stays the single source of truth.
-- [tools.md](tools.md): `gh` and `jira` setup in detail.
+- [external-tools.md](external-tools.md): `gh` and `jira` setup in detail.

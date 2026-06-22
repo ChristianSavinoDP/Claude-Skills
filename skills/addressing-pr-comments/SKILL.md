@@ -1,21 +1,26 @@
 ---
 name: addressing-pr-comments
-description: Resolve review comments on a PR following the user's Playbook rules. Use when the user got review feedback and wants help responding to or fixing PR comments, or asks to address review comments.
+description: Resolve review comments on a PR. Use whenever the user brings PR review feedback (from a person or Copilot), pastes review comments, or asks to address/respond to/fix them, even without a slash command. Trigger on pasted comments or "Copilot said...", "the reviewer wants...", "handle these comments".
 ---
 
 # Addressing PR Comments
 
-Procedure for working through review comments. The rules (validate first, push back when warranted, fix root cause, do not over-correct) live in the Playbook under "Addressing PR Comments"; this skill is the *how*. Apply the rules, do not restate them. The Playbook's "Shared Standards" apply throughout (concise, no AI slop, never fabricate).
+Procedure for working through review comments. The Playbook's always-on rules apply (verify, fix root cause, concise); this skill adds the rules for handling comments.
 
-## Before changing anything
+## Steps
 
-1. **Ask for the ticket first**, per the Playbook's mandatory first step. Scope is defined by the ticket type.
-2. Pull the comments: `gh pr view <pr> --comments`, and the diff for context: `gh pr diff <pr>`.
+1. Get the ticket first (Playbook "first step"); scope is defined by the ticket type.
+2. Pull the comments (`gh pr view <pr> --comments`) and the diff for context (`gh pr diff <pr>`).
+3. Work through the comments one at a time, deciding apply-or-push-back for each before touching code.
 
-## For each comment
+## Rules
 
-Apply the Playbook's "Addressing PR Comments" section in full (validate first, push back when warranted in the rebuttal tone, fix the root cause, group related comments, do not over-correct). Those are the rules; do not restate them. Work through the comments one at a time, deciding apply-or-push-back for each before touching code.
+- **Validate first.** Evaluate whether each comment is correct and in scope before writing code. Verify it against the codebase, do not dismiss from memory (a wrong dismissal is the common failure). Not every comment deserves a change.
+- **Push back when warranted,** directly: if a comment is wrong or out of scope, say why, respectful, concise, factual, not hedged as a suggestion. You are defending your own PR, not reviewing someone else's.
+- **Fix the root cause,** not a band-aid that silences the comment.
+- **Group related comments** that point at the same underlying issue.
+- **Do not over-correct.** Change what was asked, nothing more.
 
 ## Output
 
-Per the Playbook's "Addressing PR Comments" output rules. Do not restate them here.
+One block per comment, no intro or summary around them. For each: apply or push back, the reasoning in a sentence, and the concrete change or the drafted reply. A reply meant to be posted goes in its own copy-pasteable fenced block. Posting on the PR is a state change: confirm first, read-only by default.

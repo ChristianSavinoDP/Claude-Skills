@@ -1,6 +1,6 @@
 # The Playbook
 
-[`playbook/PLAYBOOK.md`](../playbook/PLAYBOOK.md) is the single source of truth for how Claude should work: language, shared standards, writing code, PR descriptions, reviews, investigations, and tickets.
+[`playbook/PLAYBOOK.md`](../playbook/PLAYBOOK.md) holds the always-on rules: language, the first step (get the ticket and its context), verify-don't-assume, shared standards, tool/shell rules, and safety. It is deliberately short. Task-specific procedure (how to review a PR, write code, run an investigation, draft a ticket) lives in the matching skill and loads when that work starts, so the always-on file stays small enough to actually follow.
 
 ## Always loaded
 
@@ -14,9 +14,9 @@ The installer wires all of this automatically; nothing here needs manual setup.
 
 ## Rule vs procedure
 
-The playbook holds *rules* (the *what*): always-on principles, stated concisely. Skills hold *procedures* (the *how*): how to execute a task, loaded only when relevant. A skill references a playbook rule instead of copying it, so each rule lives in exactly one place. See [skills.md](skills.md).
+The playbook holds *always-on rules* (the *what* that applies to every task): stated concisely. Each skill holds both the *procedure* and the *task-specific rules* for one kind of work (PR review rules live in the `pr-review` skill, ticket rules in `writing-tickets`, etc.), loaded only when that work starts. See [skills.md](skills.md).
 
-This is why most things belong in the playbook, not in a skill: if it is a principle that should apply to every response, it is a rule. If it is the step-by-step for one task, it is a procedure.
+The split is by scope, not by what-vs-how: if it applies to everything, it is an always-on rule in the playbook; if it only matters for one kind of task, it lives in that task's skill, so the always-on context stays small. A rule lives in exactly one place, never both.
 
 ## Editing
 

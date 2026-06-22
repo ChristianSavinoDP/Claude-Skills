@@ -1,18 +1,44 @@
 ---
 name: writing-tickets
-description: Draft a ticket (feature, bug, investigation, follow-up, task breakdown) following the user's Playbook rules. Use when the user asks to write or draft a ticket. Output goes in chat, never to a file.
+description: Draft a ticket (feature, bug, investigation, follow-up, task breakdown). Use whenever the user asks to write, draft, or create a ticket/issue/story, with or without a slash command. Output goes in chat, never to a file.
 ---
 
 # Writing Tickets
 
-Procedure for drafting tickets. The rules live in the Playbook under "Writing Tickets"; apply them, do not restate them. The Playbook's "Shared Standards" apply throughout (concise, no AI slop, never fabricate).
+Procedure for drafting tickets. The Playbook's rules apply (concise, no slop, never fabricate); this adds the ticket-specific ones.
 
-## Steps
+## Before drafting
 
-1. **Ask what type:** feature, bug, investigation, follow-up, or task breakdown. The type shapes the content.
-2. **Draft in chat only.** Do not create files, per the Playbook.
-3. **Add value.** Suggest what to investigate, flag missing criteria, and think beyond what the user literally said. A ticket that only restates the request is not useful.
+- **Know the type (gate):** feature, bug, investigation, follow-up, or task breakdown. If the user did not say, ask and wait, do not guess. Ruling a type out is not picking one. The type shapes the content.
+- **Draft in chat only,** never a file. Do not create it in Jira or offer to: the output is the draft in chat, the user takes it from there.
+
+## A ticket is what + why, not how
+
+The implementer decides how. Length is a defect: a reader should grasp the whole ticket in one scan.
+
+- **Title:** one line, the outcome. Not sub-tasks joined by "and".
+- **Context:** 2 to 4 sentences (problem + why). Link the source ticket/investigation, do not restate it.
+- **Each criterion is one checkable line,** an observable outcome. No file/function names, `if`/flag values, or per-bullet rationale; state an essential constraint as an outcome ("X no longer runs when Y is unchanged"), not as code.
+- **Past ~6 to 7 criteria it is probably several tickets:** split, do not grow one.
+- Add value with sharper criteria, not more words: flag a missing criterion or an unstated assumption.
+
+For a bug, give observed vs expected in the paragraph. An investigation's criteria are the questions to answer, not a solution. A task breakdown lists sub-tickets, each one line with short criteria.
 
 ## Output
 
-Per the Playbook's "Writing Tickets" format. Do not restate it here.
+In chat, this shape and nothing else (note the size):
+
+```text
+**Align companion's PR CI with the partner-integrations twin**
+
+companion runs its heavy CI jobs on every PR and still auto-commits generated files. DBI-1461 fixed most of it but missed the terraform/ci gating, the api-gen and sre auto-commits, templ, and the aggregate check. Mirror the partner-integrations setup; the missed cases and rationale live in DBI-1461.
+
+### Acceptance Criteria
+
+- The terraform and ci jobs run only when path-filters reports their paths changed.
+- The api-gen and sre jobs fail on a diff instead of auto-committing, and run read-only.
+- A templ format check runs and fails on a diff.
+- No auto-commit action remains under the PR workflows.
+- A single aggregate "check" job reports the combined status of every PR job.
+- A docs-only PR skips terraform and ci while "check" still reports green.
+```

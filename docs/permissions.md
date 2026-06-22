@@ -4,12 +4,13 @@ How this repo reduces permission prompts without giving up safety. All of it liv
 
 ## The model
 
-Two things decide whether a tool call prompts you:
+A tool call is decided by, in order:
 
-1. **Explicit rules** (`allow` / `ask` / `deny`): lists of concrete commands. Precedence is `deny` > `ask` > `allow`.
-2. **`defaultMode`**: what happens to anything that matches no rule.
+1. **PreToolUse hooks** (below): fast read-only check, the inline-interp/WebFetch blocks, the make/mise/go-tool guards, and finally the impact judge. A hook can `allow`, `ask`, or `deny`.
+2. **Explicit rules** (`allow` / `ask` / `deny` in `permissions.json`): concrete commands. Precedence is `deny` > `ask` > `allow`.
+3. **`defaultMode`**: what happens to anything no hook decided and no rule matched.
 
-The rules win over `defaultMode`. So an `ask` rule still prompts even when the default mode would auto-run.
+The `ask` list is the important one: it pins the always-prompt commands so they prompt regardless of mode. The `allow` list still exists for fast, obvious cases, but it is no longer exhaustive: the impact judge (the catch-all hook) is what handles the long tail, so the lists below do not need to enumerate every safe command.
 
 ## defaultMode: acceptEdits
 
@@ -55,7 +56,21 @@ Trade-off: it adds a few seconds to each `make`/`mise`/`go tool` call. That is t
 
 ## The read-only pipeline hook
 
-Allow rules match each subcommand of a compound command independently, so a read-only exploration like `cd x && grep ... | grep -v ...` can still prompt when one piece does not cleanly match. A second `PreToolUse` hook (`keru-safe-read`, a fast deterministic script, not an agent) handles that: it parses the command with shell-aware tokenizing (handling pipelines, loops, conditionals, safe redirections like `2>/dev/null`, and command substitution whose contents are themselves read-only) and auto-approves it only if every segment is a known read-only command (`grep`, `find`, `sed`, `awk`, `cat`, `ls`, `git log/diff/status`, `go list/env`, `gh` read subcommands, `base64`, ...) with no dangerous flags (`-i`, `-exec`, `-delete`), no file redirection, and no arbitrary interpreter (`python3 -c`, `ruby -e`). Anything it cannot prove safe it leaves alone, deferring to the normal allow/ask flow. It never blocks.
+Allow rules match each subcommand of a compound command independently, so a read-only exploration like `cd x && grep ... | grep -v ...` can still prompt when one piece does not cleanly match. A `PreToolUse` hook (`keru-safe-read`, a fast deterministic script, not an agent) handles that: it parses the command with shell-aware tokenizing (handling pipelines, loops, conditionals, safe redirections like `2>/dev/null`, and command substitution whose contents are themselves read-only) and auto-approves it only if every segment is a known read-only command (`grep`, `find`, `sed`, `awk`, `cat`, `ls`, `git log/diff/status`, `go fmt/build/test/list`, `mise ls/registry`, `gh` read subcommands, `base64`, ...) with no state-changing flags (`sed -i`/`perl -i` in-place edit, `find -exec/-delete`; note `-i` is only treated as dangerous for sed/perl, not for `grep -i`), no file redirection, and no arbitrary interpreter. Anything it cannot prove safe it leaves alone, deferring to the next hook. It never blocks.
+
+## The inline-interpreter block
+
+A `PreToolUse` hook (`keru-block-inline-interp`) denies running code inline via `python3 -c`, `node -e`, `ruby -e`, `perl -e`, and tells Claude to use the dedicated tool instead (`yq` for YAML, `jq` for JSON, `actionlint` for workflows). Inline interpreters are arbitrary code and the wrong tool for parsing/validation. Running a script file (`python3 foo.py`) is not blocked, only the inline-code flags.
+
+## The impact-judge hook (catch-all)
+
+Anything `keru-safe-read` does not approve falls to a final `PreToolUse` agent hook that judges one question: does the command leave the machine or is it irreversible? It reads the command and any files it references, then:
+
+- **allow** if local and reversible: reads/analyzes, or writes/deletes files in the repo working tree or `/tmp` (git can revert the repo), including formatters, codegen, OpenAPI splitters, build, test, and moving/copying local files, even when they write into the repo;
+- **ask** if it changes remote state or infra (push, deploy, terraform/kubectl/cloud mutations, DB changes), destroys what git cannot recover (`rm -rf` outside the repo, `reset --hard`, `checkout --`, `restore`, `clean`), or runs unclassifiable code (an arbitrary network package, an opaque script);
+- **ask** whenever it cannot confidently tell it is local; it never denies.
+
+This replaces ever-growing allow lists: instead of enumerating safe commands, the hook judges impact. Cost: a few seconds on commands the fast read-only check did not already approve.
 
 ## The WebFetch guard
 
