@@ -167,6 +167,14 @@ def tokens_are_safe(tokens) -> bool:
         if sub == "tool":
             if any(not a.startswith("-") for a in tokens[2:]):
                 return False
+    elif base in ("python", "python3", "py"):
+        # Only `python -m py_compile ...` is read-only-ish: it byte-compiles to
+        # check syntax and does not execute the target module (the .pyc it writes
+        # is a local, git-ignorable cache). Every other python invocation runs
+        # arbitrary code (a script, `-c`, another `-m <module>`), so it defers to
+        # the impact-judge agent.
+        if not (len(tokens) > 2 and tokens[1] == "-m" and tokens[2] == "py_compile"):
+            return False
     elif base == "terraform":
         sub = tokens[1] if len(tokens) > 1 else ""
         if sub not in TF_READONLY_SUB:
