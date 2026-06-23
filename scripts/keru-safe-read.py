@@ -63,6 +63,12 @@ TF_READONLY_SUB = {"fmt", "validate", "plan", "version", "show", "output",
 MISE_READONLY_SUB = {"registry", "ls", "list", "current", "which", "where",
                      "ls-remote", "version", "doctor", "env"}
 
+# pip subcommands that only inspect the environment. install/uninstall/download
+# (mutate the venv or fetch from the network) are NOT here and fall through to
+# the ask rules. `pip` may also be invoked as `pip3` or `python -m pip`.
+PIP_READONLY_SUB = {"list", "show", "freeze", "check", "config", "debug",
+                    "inspect", "help", "cache"}
+
 # jira: read-only commands. `me`, `version`, `open` are single-word; the rest
 # are `<group> <verb>` pairs. Writes (issue create/move/comment/edit/assign,
 # epic add/create, sprint add) are NOT here and fall through to the ask rules.
@@ -181,6 +187,17 @@ def tokens_are_safe(tokens) -> bool:
                 return tokens_are_safe(inner)
             return False  # `mise exec` without `--` is ambiguous: defer
         if sub not in MISE_READONLY_SUB:
+            return False
+    elif base in ("pip", "pip3"):
+        rest = [t for t in tokens[1:] if not t.startswith("-")]
+        sub = rest[0] if rest else ""
+        if sub not in PIP_READONLY_SUB:
+            return False
+        # `pip config set/unset/edit` writes config; `pip cache purge/remove`
+        # deletes the wheel cache. Those mutate, so defer them.
+        if sub == "config" and any(a in ("set", "unset", "edit") for a in rest[1:]):
+            return False
+        if sub == "cache" and any(a in ("purge", "remove") for a in rest[1:]):
             return False
     elif base == "gh":
         rest = [t for t in tokens[1:] if not t.startswith("-")]
