@@ -108,6 +108,27 @@ def _norm(name):
     return base[len("keru-"):] if base.startswith("keru-") else base
 
 
+def invoked_via_slash_command(text):
+    """A known skill the user invoked through its own slash command this turn.
+
+    Each skill IS its own `/keru-*` slash command (there is no wrapper layer), so
+    `/keru-pr-description` loads and runs that skill directly without emitting a
+    `Skill` tool_use. The slash command appears in the prompt as a
+    `<command-name>/keru-pr-description</command-name>` tag (or a bare
+    `/keru-pr-description` line). That invocation already satisfies the request:
+    the skill is running. Return its canonical id, or None."""
+    m = re.search(r"<command-name>\s*/?(keru-[a-z-]+)\s*</command-name>", text, re.I)
+    if not m:
+        m = re.search(r"(?m)^\s*/(keru-[a-z-]+)\b", text)
+    if not m:
+        return None
+    name = _norm(m.group(1))
+    for skill, _ in SKILLS:
+        if _norm(skill) == name:
+            return skill
+    return None
+
+
 def requested_skill(text):
     """Which known skill the user explicitly asked to use, or None."""
     # Strip IDE-injected tags so they do not create false matches.
@@ -143,6 +164,13 @@ def main():
     skill = requested_skill(text)
     if not skill:
         return  # no explicit skill request: nothing to enforce
+    # If the user ran the skill's own `/keru-*` slash command, the skill is
+    # already loaded and running this turn; that satisfies the request without a
+    # `Skill` tool_use. Enforcing one here would block a correct deliverable and
+    # force a needless re-invocation (the observed double-run). Check on the raw
+    # text, before requested_skill() strips the <command-name> tag.
+    if invoked_via_slash_command(text) == skill:
+        return  # invoked through its slash command: the skill is running
     # The requested skill counts as invoked if any invoked skill matches it after
     # normalizing away a plugin namespace (`plugin:name`, `path/name`) and the
     # `keru-` command-wrapper prefix on either side. So an invoked `keru-pr-review`
