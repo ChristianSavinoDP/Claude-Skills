@@ -11,9 +11,11 @@ This skill is local to this repo (it lives in `.claude/`, not symlinked into `~/
 
 The script and skill split the work: the deterministic checks run from `repo-health/repo-health.sh`, the semantic checks are the skill's own judgment. Never restate a script check in prose, and never script a judgment call.
 
+Invoked with arguments, `$ARGUMENTS` scopes the run: pass `docs`, `permissions`, or `installer` to run one check instead of all, and `--fix` to apply mechanical fixes instead of only reporting. Default (no arguments): all checks, report-only.
+
 ## Procedure
 
-1. Run the deterministic checks: `repo-health/repo-health.sh all`. It covers:
+1. Run the deterministic checks: `repo-health/repo-health.sh all` (or the scope from `$ARGUMENTS`). It covers:
    - **docs**: every skill/command on disk is documented in `docs/`, and no doc entry is an orphan;
    - **permissions**: no rule sits in both `allow` and `ask`, no exact duplicates;
    - **installer**: `install.sh` is idempotent and `uninstall.sh` reverses it, run in a sandbox `HOME` (touches nothing real).

@@ -27,13 +27,13 @@ Each kind of work has a skill that holds its rules and steps. The moment you rec
 
 | The task is | Skill |
 | --- | --- |
-| Reviewing a PR | `pr-review` |
-| Resolving review comments (a person's or Copilot's) | `addressing-pr-comments` |
-| Writing or changing code | `writing-code` |
-| An investigation / analysis doc | `investigation` |
-| Writing a PR description | `pr-description` |
-| Drafting a ticket | `writing-tickets` |
-| Getting a ticket/PR/repo's context before acting | `gather-context` |
+| Reviewing a PR | `keru-pr-review` |
+| Resolving review comments (a person's or Copilot's) | `keru-addressing-pr-comments` |
+| Writing or changing code | `keru-writing-code` |
+| An investigation / analysis doc | `keru-investigation` |
+| Writing a PR description | `keru-pr-description` |
+| Drafting a ticket | `keru-writing-tickets` |
+| Getting a ticket/PR/repo's context before acting | `keru-gather-context` |
 
 If a request matches one of these, the skill is mandatory; do not improvise the task from memory because no command was used.
 

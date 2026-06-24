@@ -13,7 +13,7 @@ gh auth login
 
 ## Jira (jira-cli)
 
-The `gather-context` skill reads tickets through [jira-cli](https://github.com/ankitpokhrel/jira-cli).
+The `keru-gather-context` skill reads tickets through [jira-cli](https://github.com/ankitpokhrel/jira-cli).
 
 ```bash
 brew install ankitpokhrel/jira-cli/jira-cli
@@ -53,7 +53,7 @@ Verify with `jira me` (returns your user) and `jira issue view <KEY> --plain`.
 
 ## Giving Claude task context
 
-The `gather-context` skill takes whatever you have, not just a bare key:
+The `keru-gather-context` skill takes whatever you have, not just a bare key:
 
 - a Jira key (`DBI-1458`),
 - a Jira issue URL (`https://<org>.atlassian.net/browse/DBI-1458`),

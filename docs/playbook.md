@@ -14,7 +14,7 @@ The installer wires all of this automatically; nothing here needs manual setup.
 
 ## Rule vs procedure
 
-The playbook holds *always-on rules* (the *what* that applies to every task): stated concisely. Each skill holds both the *procedure* and the *task-specific rules* for one kind of work (PR review rules live in the `pr-review` skill, ticket rules in `writing-tickets`, etc.), loaded only when that work starts. See [skills.md](skills.md).
+The playbook holds *always-on rules* (the *what* that applies to every task): stated concisely. Each skill holds both the *procedure* and the *task-specific rules* for one kind of work (PR review rules live in the `keru-pr-review` skill, ticket rules in `keru-writing-tickets`, etc.), loaded only when that work starts. See [skills.md](skills.md).
 
 The split is by scope, not by what-vs-how: if it applies to everything, it is an always-on rule in the playbook; if it only matters for one kind of task, it lives in that task's skill, so the always-on context stays small. A rule lives in exactly one place, never both.
 

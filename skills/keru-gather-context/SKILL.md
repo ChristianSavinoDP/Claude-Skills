@@ -1,5 +1,5 @@
 ---
-name: gather-context
+name: keru-gather-context
 description: Gather read-only context for a task from any starting point: a Jira ticket/epic, a GitHub PR, a repo, or a file reference. Resolves the chain in both directions (PR to ticket and ticket to PRs) and can read repos that are not cloned locally. Use when given a ticket key, a Jira/GitHub URL, or asked to understand a task before acting. Satisfies the Playbook's mandatory "ask for the ticket" and "follow the chain" steps.
 ---
 

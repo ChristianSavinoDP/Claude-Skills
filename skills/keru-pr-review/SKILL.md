@@ -1,6 +1,6 @@
 ---
-name: pr-review
-description: Review a pull request. Use whenever the user asks to review or look at a PR, gives a PR link/number to review, or asks to check changes on a branch before merge, with or without a slash command. Covers both code and investigation PRs.
+name: keru-pr-review
+description: Review a pull request. Use whenever the user asks to review or look at a PR, gives a PR link/number to review, or asks to check changes on a branch before merge, with or without a slash command. Covers both code and investigation PRs. Expects a GitHub PR link or number.
 ---
 
 # PR Review
@@ -9,7 +9,7 @@ Procedure for reviewing a PR. The Playbook's always-on rules apply (verify, neve
 
 ## Before reviewing
 
-1. Get the ticket and its context first (Playbook "first step"). The ticket type (feature vs follow-up vs investigation) and acceptance criteria change how you review.
+1. Get the ticket and its context first (Playbook "first step"). Use the `keru-gather-context` skill to gather read-only context: the PR (branch, body, files) and its linked Jira ticket and chain. The ticket type (feature vs follow-up vs investigation) and acceptance criteria change how you review.
 2. Identify the PR; ask for the number/URL if not given.
 3. Fetch the diff and metadata: `gh pr view <pr>` and `gh pr diff <pr>`. For an investigation PR, also check `docs/investigations/` for the expected format. Read changed files in full when behavior depends on surrounding code.
 

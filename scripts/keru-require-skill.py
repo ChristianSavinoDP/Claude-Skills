@@ -17,26 +17,28 @@ import sys
 
 # Known skills and the phrases (English + Spanish) that name them. Order matters:
 # more specific names first so "writing tickets" is not shadowed by "writing".
+# Each entry's first element is the canonical skill id (skills are named keru-*,
+# so it is the real skill/command name); the phrases are what the user might type.
 SKILLS = [
-    ("addressing-pr-comments", ["addressing-pr-comments", "addressing pr comments",
+    ("keru-addressing-pr-comments", ["addressing-pr-comments", "addressing pr comments",
                                 "address pr comments", "pr comments",
                                 "comentarios de pr", "responder comentarios"]),
-    ("pr-description", ["pr-description", "pr description", "descripcion de pr",
+    ("keru-pr-description", ["pr-description", "pr description", "descripcion de pr",
                         "descripcion del pr", "describir el pr"]),
     # Bare "review"/"revisar" deliberately excluded: they match casual mentions
     # ("...and then we review", "revisar el codigo") and a misnamed request (the
     # user says "revisar PRs" when the task is actually resolving review comments).
     # Require a phrase that genuinely names the PR-review skill.
-    ("pr-review", ["pr-review", "pr review", "revisar pr", "revisar el pr",
+    ("keru-pr-review", ["pr-review", "pr review", "revisar pr", "revisar el pr",
                    "revisar prs", "revisar el pull request", "revision de pr"]),
-    ("writing-tickets", ["writing-tickets", "writing tickets", "write ticket",
+    ("keru-writing-tickets", ["writing-tickets", "writing tickets", "write ticket",
                          "escribir ticket", "escribir tickets", "redactar ticket",
                          "ticket skill", "skill de ticket", "skill de escribir ticket"]),
-    ("writing-code", ["writing-code", "writing code", "escribir codigo",
+    ("keru-writing-code", ["writing-code", "writing code", "escribir codigo",
                       "code skill", "skill de codigo", "skill de escribir codigo"]),
-    ("investigation", ["investigation", "investigacion",
+    ("keru-investigation", ["investigation", "investigacion",
                        "investigation skill", "skill de investigacion"]),
-    ("gather-context", ["gather-context", "gather context",
+    ("keru-gather-context", ["gather-context", "gather context",
                         "context skill", "skill de contexto"]),
 ]
 

@@ -1,6 +1,6 @@
 ---
-name: investigation
-description: Produce an investigation deliverable (architecture doc, flow diagram, ADR, runbook, root-cause analysis). Use whenever the ticket is an investigation or the user asks to investigate, analyze, research, or document a design/decision in markdown rather than write code, with or without a slash command.
+name: keru-investigation
+description: Produce an investigation deliverable (architecture doc, flow diagram, ADR, runbook, root-cause analysis). Use whenever the ticket is an investigation or the user asks to investigate, analyze, research, or document a design/decision in markdown rather than write code, with or without a slash command. Expects a Jira ticket key or link.
 ---
 
 # Investigation
@@ -9,7 +9,7 @@ Procedure for investigation tickets, which produce markdown. The Playbook's alwa
 
 ## Before starting
 
-1. Get the ticket first (Playbook "first step").
+1. Get the ticket first (Playbook "first step"). Use the `keru-gather-context` skill to gather it and its full chain (read-only), including any linked investigation's PR and document. Do not start until that skill's gate passes.
 2. Ask whether a `taskbreakdown.yaml` is needed.
 3. Check `docs/investigations/` to match the existing format and style before writing anything new.
 

@@ -69,6 +69,14 @@ MISE_READONLY_SUB = {"registry", "ls", "list", "current", "which", "where",
 PIP_READONLY_SUB = {"list", "show", "freeze", "check", "config", "debug",
                     "inspect", "help", "cache"}
 
+# `python -m <module>` modules that only PARSE the target without importing or
+# executing it: byte-compile and static analyzers/linters/type-checkers. They
+# read source and report, so they are read-only. Deliberately excluded: `pylint`
+# (imports the target module to analyze it, executing module-level code) and any
+# formatter that rewrites files (black/isort); those defer to the impact judge.
+PYTHON_M_READONLY = {"py_compile", "pyflakes", "pycodestyle", "pydocstyle",
+                     "flake8", "mccabe", "mypy", "ruff"}
+
 # jira: read-only commands. `me`, `version`, `open` are single-word; the rest
 # are `<group> <verb>` pairs. Writes (issue create/move/comment/edit/assign,
 # epic add/create, sprint add) are NOT here and fall through to the ask rules.
@@ -111,9 +119,42 @@ def _is_inplace_flag(tok: str) -> bool:
         return True
     return False
 
-# Shell operators that separate or redirect. Redirection means a write target.
+# `gh api graphql` carries its GraphQL operation in a `query=` field, which the
+# REST `gh api` rule rejects as field data. Judge it by operation instead: a
+# read (`query`/introspection) has no `mutation`. `mutation` is a lowercase,
+# case-sensitive GraphQL reserved word, so a real mutation always contains it
+# while a type named "Mutation" (capitalized) does not, making this precise.
+GQL_MUTATION_RE = re.compile(r"\bmutation\b")
+
+
+def _gh_graphql_is_read(tokens) -> bool:
+    """True only if `gh api graphql ...` carries an inline, mutation-free query.
+    A query loaded from a file (`query=@...`) or absent cannot be proven read-
+    only, so it returns False (defer to the impact judge)."""
+    for t in tokens:
+        if t.startswith("query="):
+            value = t[len("query="):]
+            if value.startswith("@"):
+                return False  # loaded from a file/stdin: cannot inspect
+            return GQL_MUTATION_RE.search(value) is None
+    return False  # no inline query field found: cannot prove it is a read
+
+# Shell operators that separate commands.
 SEPARATORS = {"|", "||", "&&", ";", "&", "|&", "\n"}
-REDIRECTS = {">", ">>", "<", "<<", "<<<", "&>", ">|"}
+_REDIR_CHARS = set("<>&|")
+
+
+def _is_redirect_token(tok: str) -> bool:
+    """True if a token IS a redirection operator (>, >>, <, <>, >&, &>>, ...);
+    redirection means a write target. The punctuation_chars lexer isolates every
+    real redirect as a standalone token made only of redirect chars (and
+    optional fd digits), so checking the token's shape is precise. A quoted
+    string like 'a -> b' arrives as one token with letters/spaces, so it is NOT
+    flagged: this is the bug the shape check fixes versus scanning for any
+    '<'/'>' character anywhere in the token."""
+    if not tok or not any(c in "<>" for c in tok):
+        return False
+    return all(c in _REDIR_CHARS or c.isdigit() for c in tok)
 
 
 def tokens_are_safe(tokens) -> bool:
@@ -168,12 +209,14 @@ def tokens_are_safe(tokens) -> bool:
             if any(not a.startswith("-") for a in tokens[2:]):
                 return False
     elif base in ("python", "python3", "py"):
-        # Only `python -m py_compile ...` is read-only-ish: it byte-compiles to
-        # check syntax and does not execute the target module (the .pyc it writes
-        # is a local, git-ignorable cache). Every other python invocation runs
-        # arbitrary code (a script, `-c`, another `-m <module>`), so it defers to
-        # the impact-judge agent.
-        if not (len(tokens) > 2 and tokens[1] == "-m" and tokens[2] == "py_compile"):
+        # Only `python -m <module>` for a parse-only module (PYTHON_M_READONLY:
+        # py_compile and the static analyzers/linters/type-checkers) is read-
+        # only: it reads source and reports without importing or executing the
+        # target (py_compile's .pyc is a local, git-ignorable cache). Every other
+        # python invocation runs arbitrary code (a script, `-c`, another module),
+        # so it defers to the impact-judge agent.
+        if not (len(tokens) > 2 and tokens[1] == "-m"
+                and tokens[2] in PYTHON_M_READONLY):
             return False
     elif base == "terraform":
         sub = tokens[1] if len(tokens) > 1 else ""
@@ -211,6 +254,11 @@ def tokens_are_safe(tokens) -> bool:
         rest = [t for t in tokens[1:] if not t.startswith("-")]
         sub1 = rest[0] if rest else ""
         sub2 = rest[1] if len(rest) > 1 else ""
+        if sub1 == "api" and sub2 == "graphql":
+            # `gh api graphql` passes its operation via `-f query='...'`, which
+            # the REST rule below would reject. Allow only an inline, mutation-
+            # free query; a mutation or a file-loaded query defers to the judge.
+            return _gh_graphql_is_read(tokens[2:])
         if sub1 == "api":
             # gh api is read-only only as a GET: no method override, no field data.
             bad = {"-X", "--method", "-f", "-F", "--field", "--raw-field", "--input"}
@@ -298,7 +346,7 @@ def command_is_safe(command: str) -> bool:
     for t in toks:
         if t in DEFER_KW:
             return False  # case/function: do not try to parse
-        if t in REDIRECTS or any(c in t for c in "<>"):
+        if _is_redirect_token(t):
             return False  # redirection to/from a file
         if t in SEPARATORS:
             if not flush():

@@ -82,6 +82,7 @@
       "Bash(jira issue view *)",
       "Bash(jira issue list *)",
       "Bash(keru-jira-dev *)",
+      "Bash(keru-bot-triage *)",
       "Bash(jira epic list *)",
       "Bash(jira me)",
       "Bash(gh pr list *)",

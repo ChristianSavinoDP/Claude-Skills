@@ -31,31 +31,22 @@ warn() { WARNINGS+=("$1"); }
 # it is intentionally excluded from this cross-check and documents itself in its
 # own README.
 check_docs() {
-  local skills_dir="$REPO_DIR/skills" cmds_dir="$REPO_DIR/commands"
-  local skills_md="$REPO_DIR/docs/skills.md" cmds_md="$REPO_DIR/docs/commands.md"
+  local skills_dir="$REPO_DIR/skills"
+  local skills_md="$REPO_DIR/docs/skills.md"
 
-  # Every skill on disk is documented in docs/skills.md and has a command wrapper.
+  # Each skill is its own slash command (the wrapper layer was removed): the
+  # directory name under skills/ is the command name, so skills are named keru-*.
+  # Every skill on disk must be documented in docs/skills.md.
   for d in "$skills_dir"/*/; do
     [ -d "$d" ] || continue
     local name; name="$(basename "$d")"
     if ! grep -q "\`$name\`" "$skills_md"; then
       fail "skill '$name' exists but is not in docs/skills.md"
     fi
-    if [ ! -f "$cmds_dir/keru-$name.md" ]; then
-      warn "skill '$name' has no command wrapper commands/keru-$name.md"
-    fi
-  done
-
-  # Every command on disk maps to a real skill and is documented.
-  for f in "$cmds_dir"/keru-*.md; do
-    [ -f "$f" ] || continue
-    local base name; base="$(basename "$f" .md)"; name="${base#keru-}"
-    if [ ! -d "$skills_dir/$name" ]; then
-      warn "command '$base' has no matching skill dir skills/$name/"
-    fi
-    if ! grep -q "/$base" "$cmds_md"; then
-      fail "command '/$base' exists but is not in docs/commands.md"
-    fi
+    case "$name" in
+      keru-*) : ;;
+      *) fail "skill '$name' is not prefixed keru-; its slash command would not show as /keru-*" ;;
+    esac
   done
 
   # Orphan entries: a skill the catalogue table lists but no longer exists.
@@ -64,18 +55,7 @@ check_docs() {
     if [ ! -d "$skills_dir/$name" ]; then
       fail "docs/skills.md lists skill '$name' but skills/$name/ does not exist"
     fi
-  done < <(grep -oE '^\| `[a-z][a-z-]+`' "$skills_md" | tr -d '|` ')
-
-  # Orphan command entries: only scan the command table rows (lines starting
-  # with "| `/keru-"), so placeholder mentions like /keru-name in prose or code
-  # fences are not treated as real commands.
-  while IFS= read -r cmd; do
-    [ -n "$cmd" ] || continue
-    local base="${cmd#/}"
-    if [ ! -f "$cmds_dir/$base.md" ]; then
-      fail "docs/commands.md lists command '$cmd' but commands/$base.md does not exist"
-    fi
-  done < <(grep -oE '^\| `/keru-[a-z-]+`' "$cmds_md" | grep -oE '/keru-[a-z-]+' | sort -u)
+  done < <(grep -oE '^\| `keru-[a-z-]+`' "$skills_md" | tr -d '|` ')
 }
 
 # --- permissions: structural checks on config/permissions.json ---------------

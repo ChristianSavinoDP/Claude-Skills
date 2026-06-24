@@ -10,12 +10,16 @@ This makes the `description` the most important line in a skill: it states *when
 
 ```markdown
 ---
-name: pr-review
+name: keru-pr-review
 description: Review a pull request. Use whenever the user asks to review or look at a PR...
 ---
 ```
 
-If you want to invoke a flow explicitly instead of relying on the match, use its slash command (see [commands.md](commands.md)). The command is only a shortcut: the playbook ("Load the skill for the task") makes the skill mandatory whenever a request matches it, command or not, so a skill should never be skipped just because you described the task in plain words.
+## Invoking a skill explicitly
+
+Every skill is also a slash command: type `/keru-<name>` to run it deliberately, with arguments (`/keru-writing-code DBI-1458`). Claude Code merged custom commands into skills, so a skill IS its command; there is no separate wrapper file. The slash name comes from the skill's directory name, which is why every skill here is named `keru-*`: it keeps them grouped and easy to spot in the `/` menu, distinct from built-in and plugin commands. Whatever you type after the name is available to the skill as `$ARGUMENTS`.
+
+The command is only a shortcut: the playbook ("Load the skill for the task") makes the skill mandatory whenever a request matches it, typed or not, so a skill is never skipped just because you described the task in plain words.
 
 ## The explicit-request safeguard
 
@@ -27,21 +31,24 @@ The playbook holds the always-on rules (they apply to every task). A skill holds
 
 ## Catalogue
 
+Each skill is also its slash command (type the name, or just describe the task and let it trigger).
+
 | Skill | Triggers when you want to | Notes |
 | --- | --- | --- |
-| `writing-code` | implement, build, or fix code | reads existing patterns first, stays in scope |
-| `pr-review` | review a PR | applies the playbook's review rules |
-| `addressing-pr-comments` | resolve review comments | validates each comment before applying |
-| `investigation` | produce a doc, ADR, runbook, or RCA | markdown deliverable, sources at the end |
-| `pr-description` | write a PR description | follows the repo's PR template |
-| `writing-tickets` | draft a ticket | output in chat only, never a file |
-| `gather-context` | gather context from a ticket, PR, repo, or URL | read-only; resolves the chain both ways, can read uncloned repos |
+| `keru-writing-code` | implement, build, or fix code | reads existing patterns first, stays in scope |
+| `keru-pr-review` | review a PR | applies the playbook's review rules |
+| `keru-addressing-pr-comments` | resolve review comments | validates each comment before applying |
+| `keru-investigation` | produce a doc, ADR, runbook, or RCA | markdown deliverable, sources at the end |
+| `keru-pr-description` | write a PR description | follows the repo's PR template |
+| `keru-writing-tickets` | draft a ticket | output in chat only, never a file |
+| `keru-gather-context` | gather context from a ticket, PR, repo, or URL | read-only; resolves the chain both ways, can read uncloned repos |
+| `keru-bot-triage` | triage dependency/security bot PRs and Dependabot alerts across repos | read-only; uses the `keru-bot-triage` helper, never merges |
 
 ## Authoring a new skill
 
-1. Create `skills/<name>/SKILL.md` with `name` and `description` frontmatter.
+1. Create `skills/keru-<name>/SKILL.md` with `name` and `description` frontmatter (set `name` to match the directory, `keru-<name>`). The directory name is what you type after `/`, so the `keru-` prefix is what groups these in the menu.
 2. Write the procedure and the task-specific rules. Apply the playbook's always-on rules; do not restate them.
 3. Run `scripts/install.sh` to symlink it.
 4. Restart to pick it up.
 
-Pick a name that does not collide with built-in commands (`review`, `code-review`). If it collides, yours wins but it is confusing; prefer a distinct name.
+The `keru-` prefix also keeps names clear of built-in and plugin commands (`review`, `code-review`); a bare name like `review` would collide, and although your skill wins, it is confusing.

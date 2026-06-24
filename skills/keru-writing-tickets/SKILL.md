@@ -1,5 +1,5 @@
 ---
-name: writing-tickets
+name: keru-writing-tickets
 description: Draft a ticket (feature, bug, investigation, follow-up, task breakdown). Use whenever the user asks to write, draft, or create a ticket/issue/story, with or without a slash command. Output goes in chat, never to a file.
 ---
 

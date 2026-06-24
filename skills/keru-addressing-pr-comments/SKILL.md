@@ -1,6 +1,6 @@
 ---
-name: addressing-pr-comments
-description: Resolve review comments on a PR. Use whenever the user brings PR review feedback (from a person or Copilot), pastes review comments, or asks to address/respond to/fix them, even without a slash command. Trigger on pasted comments or "Copilot said...", "the reviewer wants...", "handle these comments".
+name: keru-addressing-pr-comments
+description: Resolve review comments on a PR. Use whenever the user brings PR review feedback (from a person or Copilot), pastes review comments, or asks to address/respond to/fix them, even without a slash command. Trigger on pasted comments or "Copilot said...", "the reviewer wants...", "handle these comments". Expects a GitHub PR link.
 ---
 
 # Addressing PR Comments
@@ -9,7 +9,7 @@ Procedure for working through review comments. The Playbook's always-on rules ap
 
 ## Steps
 
-1. Get the ticket first (Playbook "first step"); scope is defined by the ticket type.
+1. Get the ticket first (Playbook "first step"); scope is defined by the ticket type. Use the `keru-gather-context` skill to gather the PR and its linked ticket and chain (read-only) before deciding on any comment.
 2. Pull the comments (`gh pr view <pr> --comments`) and the diff for context (`gh pr diff <pr>`).
 3. Work through the comments one at a time, deciding apply-or-push-back for each before touching code.
 

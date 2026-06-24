@@ -8,14 +8,13 @@ repo-health is local to this repo on purpose. It is NOT an operational skill shi
 
 - `repo-health/repo-health.sh` - the deterministic checks (docs cross-reference, permissions structure, installer idempotency). Run directly: `repo-health/repo-health.sh [all|docs|permissions|installer]`.
 - `repo-health/README.md` - this file.
-- `.claude/skills/repo-health/SKILL.md` - the skill: runs the script, then layers the semantic checks it cannot (rule drift between playbook and skills, doc-prose accuracy).
-- `.claude/commands/repo-health.md` - the `/repo-health` slash command, a thin wrapper over the skill.
+- `.claude/skills/repo-health/SKILL.md` - the skill, also its own `/repo-health` slash command: runs the script, then layers the semantic checks it cannot (rule drift between playbook and skills, doc-prose accuracy).
 
 ## What it checks
 
 | Check | Kind | What |
 | --- | --- | --- |
-| docs | mechanical | every skill/command is documented in `docs/`; no orphan doc entries |
+| docs | mechanical | every skill is documented in `docs/` and named `keru-*`; no orphan doc entries |
 | permissions | mechanical | no rule in both `allow` and `ask`; no exact duplicates |
 | installer | mechanical | `install.sh` is idempotent and `uninstall.sh` reverses it (sandboxed `HOME`) |
 | rule drift | semantic | a rule stated in more than one place (playbook vs skill, skill vs skill) |

@@ -10,7 +10,7 @@ Task-specific rules and procedure (how to review a PR, write code, run an invest
 
 The design decisions in this repo all come from these. When extending it, keep them; if a change fights one of them, it is probably the wrong change.
 
-1. **One source of truth, by scope.** Each rule lives in exactly one place: if it applies to every task, it is in the playbook; if it only matters for one kind of work, it lives in that task's skill. Never both. Commands and docs reference, never restate.
+1. **One source of truth, by scope.** Each rule lives in exactly one place: if it applies to every task, it is in the playbook; if it only matters for one kind of work, it lives in that task's skill. Never both. Docs reference, never restate; and each skill is its own slash command, so there is no wrapper layer to restate it either.
 2. **Small always-on context.** The playbook stays short so it is actually followed; if everything is a rule, nothing is. Task detail loads on demand via the skill, so the permanent context is not a wall no one reads.
 3. **Less friction, never less safety.** Auto-approve what is safe so work flows, but always stop for what matters. Reducing prompts is a goal; removing a real safety gate is not.
 4. **Local vs. remote is the safety line.** Local, reversible work (build, test, edit, format, delete local files) runs without asking. Anything that changes remote state, infrastructure, or data not recoverable from git (deploy, push, apply, DB writes, discarding uncommitted changes) asks first.
@@ -21,6 +21,6 @@ The design decisions in this repo all come from these. When extending it, keep t
 
 ## Working in this repo
 
-This repo is activated on a machine by `scripts/install.sh`: it symlinks skills and commands into `~/.claude`, syncs `config/` into the global settings, and installs `keru-*` helpers. So the rule when changing anything here is: edit the source (playbook, a skill, a command, `config/`), then re-run `scripts/install.sh`. Editing the installed copy directly is wrong; it is a symlink or a synced block, and the next install overwrites it.
+This repo is activated on a machine by `scripts/install.sh`: it symlinks skills (each one its own `/keru-*` slash command) into `~/.claude`, syncs `config/` into the global settings, and installs `keru-*` helpers. So the rule when changing anything here is: edit the source (playbook, a skill, `config/`), then re-run `scripts/install.sh`. Editing the installed copy directly is wrong; it is a symlink or a synced block, and the next install overwrites it.
 
 See [docs/architecture.md](docs/architecture.md) for the full design.

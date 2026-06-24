@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Set up this repo in Claude Code: symlink skills and commands into ~/.claude,
-# merge global permission settings and hooks (including the playbook
+# Set up this repo in Claude Code: symlink skills into ~/.claude (each skill is
+# its own /keru-* slash command, no wrapper layer), merge global permission
+# settings and hooks (including the playbook
 # SessionStart hook, generated with this machine's repo path), install the
 # keru-* helpers onto PATH, and check the external tools (gh, jira). The repo
 # stays the single source of truth; edits here take effect everywhere.
@@ -18,26 +19,6 @@ link_dir() {
     [ -e "$entry" ] || continue
     local name target
     entry="${entry%/}"
-    name="$(basename "$entry")"
-    target="$dest/$name"
-    if [ -L "$target" ]; then
-      rm "$target"
-    elif [ -e "$target" ]; then
-      echo "skip: $target exists and is not a symlink (leaving as-is)"
-      continue
-    fi
-    ln -s "$entry" "$target"
-    echo "linked: $target -> $entry"
-  done
-}
-
-link_files() {
-  local src="$REPO_DIR/$1" dest="$CLAUDE_DIR/$1"
-  [ -d "$src" ] || return 0
-  mkdir -p "$dest"
-  for entry in "$src"/*.md; do
-    [ -e "$entry" ] || continue
-    local name target
     name="$(basename "$entry")"
     target="$dest/$name"
     if [ -L "$target" ]; then
@@ -184,11 +165,12 @@ BIN_DIR="$HOME/.local/bin"
 install_helpers() {
   mkdir -p "$BIN_DIR"
   install -m 0755 "$REPO_DIR/scripts/keru-jira-dev.sh" "$BIN_DIR/keru-jira-dev"
+  install -m 0755 "$REPO_DIR/scripts/keru-bot-triage.sh" "$BIN_DIR/keru-bot-triage"
   install -m 0755 "$REPO_DIR/scripts/keru-safe-read.py" "$BIN_DIR/keru-safe-read"
   install -m 0755 "$REPO_DIR/scripts/keru-block-webfetch.py" "$BIN_DIR/keru-block-webfetch"
   install -m 0755 "$REPO_DIR/scripts/keru-block-inline-interp.py" "$BIN_DIR/keru-block-inline-interp"
   install -m 0755 "$REPO_DIR/scripts/keru-require-skill.py" "$BIN_DIR/keru-require-skill"
-  echo "installed: keru-jira-dev, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill in $BIN_DIR"
+  echo "installed: keru-jira-dev, keru-bot-triage, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill in $BIN_DIR"
   ensure_on_path
 }
 
@@ -245,7 +227,7 @@ check_tools() {
     fi
   else
     TOOLS_OK=0
-    echo "action: gh not installed and brew unavailable. See docs/tools.md."
+    echo "action: gh not installed and brew unavailable. See docs/external-tools.md."
   fi
 
   # Jira CLI: needed by the gather-context skill.
@@ -261,13 +243,15 @@ check_tools() {
     fi
   else
     TOOLS_OK=0
-    echo "action: jira not installed and brew unavailable. See docs/tools.md."
+    echo "action: jira not installed and brew unavailable. See docs/external-tools.md."
   fi
 }
 
 link_dir skills
-link_files commands
 prune_dangling skills
+# Skills are now their own slash commands; the commands/ wrapper layer was
+# removed. Still prune ~/.claude/commands so a prior install's wrapper symlinks
+# (now source-gone) are cleaned up.
 prune_dangling commands
 merge_config
 install_helpers

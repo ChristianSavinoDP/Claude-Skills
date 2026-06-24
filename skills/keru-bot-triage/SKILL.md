@@ -1,0 +1,51 @@
+---
+name: keru-bot-triage
+description: Triage open dependency/security bot PRs (Dependabot, Frogbot, SDK-gen, etc.) and Dependabot security alerts across one or more repos. Use whenever the user asks to check/review bot PRs, dependency bumps, security alerts, or "triage dependabot", with or without a slash command. Read-only; never merges.
+---
+
+# Bot Triage
+
+Triages the dependency- and security-bot PRs and the Dependabot security alerts across a set of repos, so the user sees at a glance what is a routine bump versus a security issue, and which alerts have no fixing PR yet. The Playbook's always-on rules apply (verify, read-only for external systems unless asked, concise); this skill adds the triage procedure.
+
+The mechanical fetch is one read-only helper, `keru-bot-triage <owner/repo>` (installed on PATH, allowlisted). It returns JSON per repo; this skill runs it per repo and turns the results into the report. Do not re-implement its `gh` calls inline.
+
+## Repo set
+
+The repos to triage are a personal choice. There is NO default list in the repo: the list lives only in memory (see [[dependency-bot-repos]]), and only once the user has chosen to save one. It is not project config.
+
+1. Resolve the list, in order: repos named in this invocation win for this run (add/remove/replace); else the saved memory list if one exists; else ask the user, because nothing is seeded by default. Never guess.
+2. The helper validates each repo against GitHub (`gh repo view`) and exits non-zero on a bad one. On that error, re-ask for the correct repo instead of proceeding.
+3. Persist only on request: if the user asks to remember the list, write/update the `[[dependency-bot-repos]]` memory file. Do not create it unprompted.
+
+## Procedure
+
+For each repo, run `keru-bot-triage <owner/repo>` and read its JSON (`pull_requests[]` with `number`, `title`, `url`, `section`, `is_security`, `checks.state`, `draft`; `alerts` with `total`, `by_severity`, `items[]` (each with `url`); `security_url`).
+
+- **Classify, do not just list.** Each bot PR already carries a `section` (dependabot / frogbot / sdk-gen / release / mise / renovate / other-bot) and an `is_security` flag.
+- **Correlate alerts to PRs.** For each security alert, check whether an open PR resolves it (same package/manifest). What matters is the alerts with NO fixing PR; those are the ones to surface. Note the `gh` API alert count can differ from the Security tab UI count; the API is the source of truth.
+- **Checks matter for safety.** A green bump is low-risk; a failing one is not. Use `checks.state` to judge, mention it only when it is not passing.
+
+## Output
+
+The deliverable is a chat message, not a file. Do not write it to a file unless the user explicitly asks. Group by service (repo). For each service, list every open bot PR as a link, then, only if there are security alerts with no fixing PR, list those below the PRs and link to the page where they are viewed (`security_url`).
+
+Use exactly this shape per service:
+
+```text
+**<service>**
+PRs:
+- <PR title> — <url>
+- <PR title> — <url>
+Security (no fixing PR): <package/advisory>, <package/advisory>
+<security_url>
+```
+
+Omit the `Security` block entirely when every alert is covered by a PR (or there are none). If a service has no open bot PRs but does have uncovered alerts, keep the `PRs:` line with "none" so the gap is obvious. Lead the whole message with the services that have uncovered security alerts. Keep it scannable: no per-PR prose, just the links; add a one-line note after a PR only when its checks are failing.
+
+## Scope and safety
+
+Read-only, always. Never merge (merging is a human action, no exceptions) and never comment. The most the user can opt into per run is auto-approving a PR, and only when its checks are green; even that is gated on repo permissions (`gh pr review` is in the `ask` list today, so it prompts, and auto-approve is not enabled until that is explicitly granted). Default behavior is report-only.
+
+## Before delivering
+
+Confirm every repo in the resolved list was triaged (or its access error reported), and that alert-to-PR correlation was actually checked, not assumed (Playbook "verify"). State counts you report came from the helper output, not memory.

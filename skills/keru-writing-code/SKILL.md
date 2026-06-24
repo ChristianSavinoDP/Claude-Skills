@@ -1,6 +1,6 @@
 ---
-name: writing-code
-description: Implement a code change. Use whenever the task is to build, implement, fix, refactor, or change code (with or without a slash command); trigger on "implement X", "fix this", "add Y", a ticket asking for a code change. Not for reviewing, investigating, or docs.
+name: keru-writing-code
+description: Implement a code change. Use whenever the task is to build, implement, fix, refactor, or change code (with or without a slash command); trigger on "implement X", "fix this", "add Y", a ticket asking for a code change. Not for reviewing, investigating, or docs. Expects a Jira ticket key or link.
 ---
 
 # Writing Code
@@ -9,7 +9,7 @@ Procedure for implementing a code change. The Playbook's always-on rules still a
 
 ## Before coding
 
-1. Get the ticket and its context first (Playbook "first step"). Scope and acceptance criteria come from it.
+1. Get the ticket and its context first (Playbook "first step"). Use the `keru-gather-context` skill to gather the ticket and its full chain (read-only) as the source of truth: linked issues, parent/epic, and, if the ticket came from an investigation, that investigation's ticket AND its PR/document. Do not start coding until that skill's gate passes. Scope and acceptance criteria come from it.
 2. Read the surrounding code and existing patterns before writing, so the change matches what is there. Reuse what exists instead of adding new.
 
 ## Code-specific rules

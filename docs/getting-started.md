@@ -12,13 +12,13 @@ scripts/install.sh
 
 The installer is idempotent (safe to re-run) and never overwrites a real, non-symlink file. It does five things:
 
-1. Symlinks each `skills/<name>/` and `commands/*.md` into `~/.claude`.
+1. Symlinks each `skills/keru-<name>/` into `~/.claude/skills` (each one doubles as its `/keru-<name>` slash command).
 2. Prunes symlinks whose source was deleted from the repo.
 3. Merges `config/` (permissions and hooks) into the global `~/.claude/settings.json`, plus the playbook `SessionStart` hook generated with this machine's repo path, preserving what is already there (a `.bak` is written first).
 4. Installs the `keru-*` helper scripts into `~/.local/bin` and adds it to PATH if missing.
 5. Checks the external tools (`gh`, `jira`): installs missing ones via Homebrew, validates auth, and prints the exact setup command for anything that needs interactive configuration.
 
-Restart Claude Code sessions afterward. Skills, commands, permissions, and hooks are loaded at session start, so changes apply to new sessions, not the current one.
+Restart Claude Code sessions afterward. Skills (and their slash commands), permissions, and hooks are loaded at session start, so changes apply to new sessions, not the current one.
 
 ## Tool setup
 
@@ -32,9 +32,10 @@ The installer reports `ok:` or `action:` per tool. Resolve any `action:` lines:
 In a new session:
 
 - Type `/` and confirm the commands appear (`/keru-pr-review`, `/keru-writing-code`, ...).
-- Ask Claude to read a ticket (e.g. "read DBI-1234"); the `gather-context` skill should fetch it and its chain without you exporting anything by hand.
+- Ask Claude to read a ticket (e.g. "read DBI-1234"); the `keru-gather-context` skill should fetch it and its chain without you exporting anything by hand.
 
 ## See also
 
 - [architecture.md](architecture.md): how the repo stays the single source of truth.
 - [external-tools.md](external-tools.md): `gh` and `jira` setup in detail.
+- [memory.md](memory.md): what belongs in memory vs. in the repo.
