@@ -27,6 +27,10 @@ Read the relevant code and docs directly; track each claim back to evidence you 
 - **Sources** in a section at the end.
 - **Pass markdownlint:** proper heading hierarchy, fenced code blocks with a language, no trailing spaces.
 
+## Output
+
+The document itself, nothing around it. Your visible response OPENS with a markdown heading (`#` or `##`), the first finding or the question being answered. No generic intro, no "here is the investigation", no scope line, no recap of what you read before the first heading. The first character of your response is `#`. A meta-comment, if any, goes after the document.
+
 ## Before delivering
 
 Confirm every acceptance criterion is answered and every conclusion is backed by evidence you actually checked (Playbook "verify"). Diagrams must match the described behavior. Re-read once to cut filler.

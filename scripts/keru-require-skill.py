@@ -71,6 +71,15 @@ def load_turn(transcript_path):
     for i, r in enumerate(records):
         if r.get("type") != "user":
             continue
+        # Skip injected, non-human user records. Claude Code marks these
+        # isMeta=true: the loaded SKILL.md body ("Use the `gather-context`
+        # skill..."), the "Base directory for this skill:" preamble, and our own
+        # "Stop hook feedback:" block re-injected as a user turn. Reading any of
+        # these as "the user's prompt" is the false positive: the skill body trips
+        # USE_SKILL, and the feedback block makes the hook re-trigger on its own
+        # output. Only genuine prompts (isMeta absent/false) count.
+        if r.get("isMeta"):
+            continue
         content = (r.get("message") or {}).get("content")
         text = ""
         if isinstance(content, str):
@@ -131,6 +140,10 @@ def invoked_via_slash_command(text):
 
 def requested_skill(text):
     """Which known skill the user explicitly asked to use, or None."""
+    # Never react to this hook's own feedback if it is ever read back as a prompt
+    # (defense in depth: load_turn already drops isMeta records, where it lives).
+    if "You were explicitly asked to use the" in text or "Stop hook feedback:" in text:
+        return None
     # Strip IDE-injected tags so they do not create false matches.
     text = re.sub(r"<ide_[^>]*>.*?</ide_[^>]*>", " ", text, flags=re.S)
     text = re.sub(r"<[^>]+>", " ", text)

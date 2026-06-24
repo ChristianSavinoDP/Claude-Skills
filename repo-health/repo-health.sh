@@ -11,8 +11,11 @@
 #                 allow and ask, no exact duplicates)
 #   installer   - install.sh is idempotent and uninstall.sh reverses it, run in
 #                 a sandbox HOME so nothing real is touched
+#   hooks       - behavioral tests for the hooks' LOGIC (safe-read decisions,
+#                 require-skill blocking), the class of regression the other
+#                 checks cannot see (a hook reasoning on a stale assumption)
 #
-# Usage: repo-health/repo-health.sh [all|docs|permissions|installer]  (default: all)
+# Usage: repo-health/repo-health.sh [all|docs|permissions|installer|hooks]  (default: all)
 # Exit code: 1 if any check fails, 0 otherwise. Read-only except the installer
 # check, which writes only under a temp dir it removes on exit.
 set -euo pipefail
@@ -156,14 +159,36 @@ check_installer() {
   fi
 }
 
+# --- hooks: behavioral tests on hook logic -----------------------------------
+# The docs/permissions/installer checks verify artifacts are consistent; they
+# cannot see a hook that is installed and named right but reasons on a stale
+# assumption (e.g. that a /keru-* slash command emits a Skill tool_use). Those
+# regressions surface only by exercising the hook on real inputs.
+check_hooks() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    warn "python3 not found; skipping hook behavioral tests"
+    return 0
+  fi
+  local out
+  if ! out="$(python3 "$REPO_DIR/repo-health/test-hooks.py" 2>&1)"; then
+    # Surface each failing test line from the test runner's output.
+    while IFS= read -r line; do
+      case "$line" in *FAIL:*) fail "hook test ${line#*FAIL: }" ;; esac
+    done <<< "$out"
+    # If it failed but emitted no FAIL line (e.g. crash), record the tail.
+    case "$out" in *FAIL:*) : ;; *) fail "hook tests errored: $(echo "$out" | tail -1)" ;; esac
+  fi
+}
+
 # --- run ---------------------------------------------------------------------
 target="${1:-all}"
 case "$target" in
   docs)        check_docs ;;
   permissions) check_permissions ;;
   installer)   check_installer ;;
-  all)         check_docs; check_permissions; check_installer ;;
-  *) echo "usage: $(basename "$0") [all|docs|permissions|installer]" >&2; exit 2 ;;
+  hooks)       check_hooks ;;
+  all)         check_docs; check_permissions; check_installer; check_hooks ;;
+  *) echo "usage: $(basename "$0") [all|docs|permissions|installer|hooks]" >&2; exit 2 ;;
 esac
 
 echo "=== repo-health: $target ==="

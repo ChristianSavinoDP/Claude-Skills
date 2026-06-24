@@ -52,7 +52,7 @@ Within the ticket scope?
 
 ## Output
 
-In the chat (not a file, unless asked), NOT a prose essay or conversation log. A one-line verdict (`Approve`, `Request changes`, or `Comment`), then findings grouped under `### Blocking` / `### Nits` / `### Questions` (omit empty groups). Each finding is exactly:
+In the chat (not a file, unless asked), NOT a prose essay or conversation log. OPEN with a one-line verdict, format `Verdict: <Approve|Request changes|Comment>` (the `Verdict:` label then exactly one of the three words, nothing else on that line). Then findings grouped under `### Blocking` / `### Nits` / `### Questions` (omit empty groups). Each finding is exactly:
 
 ````text
 `internal/adapters/users/adapter.go:281`

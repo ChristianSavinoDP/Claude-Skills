@@ -23,4 +23,4 @@ Procedure for working through review comments. The Playbook's always-on rules ap
 
 ## Output
 
-One block per comment, no intro or summary around them. For each: apply or push back, the reasoning in a sentence, and the concrete change or the drafted reply. A reply meant to be posted goes in its own copy-pasteable fenced block. Posting on the PR is a state change: confirm first, read-only by default.
+One block per comment, no intro or summary around them. Each block OPENS with a bold header naming the comment (`**path:line**`, or `**<short label>**` when it has no location), nothing before it. Then: apply or push back, the reasoning in a sentence, and the concrete change or the drafted reply. A reply meant to be posted goes in its own copy-pasteable fenced block. Posting on the PR is a state change: confirm first, read-only by default.
