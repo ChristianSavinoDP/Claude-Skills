@@ -16,6 +16,7 @@ Procedure for working through review comments. The Playbook's always-on rules ap
 ## Rules
 
 - **Validate first.** Evaluate whether each comment is correct and in scope before writing code. Verify it against the codebase, do not dismiss from memory (a wrong dismissal is the common failure). Not every comment deserves a change.
+- **Your reply is a deliverable, not chat.** It goes to the reviewer, so every factual claim in it (how a library/API/field behaves, what a value does) is held to the Playbook's verify rule: read the source before asserting, no carve-out for "this is just a discussion answer". Answering a reviewer's "would it make sense to..." is exactly where a confident-but-unchecked claim about a familiar library slips in.
 - **Push back when warranted,** directly: if a comment is wrong or out of scope, say why, respectful, concise, factual, not hedged as a suggestion. You are defending your own PR, not reviewing someone else's.
 - **Fix the root cause,** not a band-aid that silences the comment.
 - **Group related comments** that point at the same underlying issue.

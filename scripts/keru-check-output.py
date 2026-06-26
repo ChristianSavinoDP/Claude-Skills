@@ -186,13 +186,60 @@ def _text_of(content):
     return ""
 
 
+def _strip_code(msg):
+    """Remove fenced code blocks (``` ... ```) and inline `code` spans, so an
+    em dash that legitimately appears in a pasted diff/snippet is not flagged.
+    Only prose em dashes violate the Playbook rule."""
+    # Drop fenced blocks first (any fence length >= 3 backticks), non-greedy.
+    no_fences = re.sub(r"`{3,}.*?`{3,}", " ", msg, flags=re.S)
+    # Then inline spans.
+    return re.sub(r"`[^`]*`", " ", no_fences)
+
+
+def check_no_em_dash(msg):
+    """Playbook 'No em dashes' rule, applied to deliverable prose. Returns
+    ('ok'|'violation', reason). Em dashes inside code are ignored."""
+    prose = _strip_code(msg)
+    if "—" not in prose:  # em dash —
+        return "ok", ""
+    # Show a little context around the first offending em dash.
+    idx = prose.index("—")
+    snippet = prose[max(0, idx - 30):idx + 30].replace("\n", " ").strip()
+    return ("violation",
+            "it uses an em dash (the Playbook forbids them: use commas, "
+            "semicolons, colons, or parentheses). Near: %r." % snippet)
+
+
+# Strong structural fingerprints: forms that ONLY a given deliverable produces,
+# so finding one proves the message is that deliverable even when its skill was
+# never loaded (the "produced the deliverable without the skill" case). These are
+# intentionally stricter than the opening check's "looks_like" signals: each must
+# be a multi-marker structure unlikely to appear in ordinary chat.
+def _fingerprint_skill(msg):
+    # pr-review: a verdict-like opening AND a findings heading.
+    if REVIEW_HEADING.search(msg) and VERDICT_HEAD.match(first_visible_line(msg)):
+        return "pr-review"
+    # writing-tickets: the AC heading is unique to a drafted ticket.
+    if TICKET_AC.search(msg):
+        return "writing-tickets"
+    # addressing-pr-comments: two or more bold path:line headers (one block per
+    # comment). One alone is too weak; two distinct comment blocks is the form.
+    pathheaders = re.findall(r"(?m)^\*\*[\w./-]+\.\w+:\d+\*\*", msg)
+    if len(pathheaders) >= 2:
+        return "addressing-pr-comments"
+    return None
+
+
 def governing_skill_and_message(records):
     """Return (checker_skill_name, last_assistant_text) for this turn, or (None, '').
 
-    The governing deliverable skill is the one a checker exists for, identified by
-    the slash command in the last human prompt or a Skill tool_use after it
-    (gather-context, a prerequisite, is ignored). The message is the last
-    assistant text in the file (what the Stop hook fires on).
+    The governing deliverable skill is found two ways, in order:
+      1. It was loaded: a `/keru-X` slash command in the last human prompt or a
+         Skill tool_use after it (gather-context, a prerequisite, is ignored).
+      2. It was NOT loaded but the message has an unmistakable deliverable
+         fingerprint (a strong structural form only that deliverable produces).
+         This catches producing the deliverable without ever loading its skill.
+    The message is the last assistant text in the file (what Stop fires on).
     """
     # Last human prompt (isMeta records are injected, not the user; skip them).
     last_user_idx = None
@@ -226,10 +273,6 @@ def governing_skill_and_message(records):
                     candidates.add(_norm(s))
     candidates.discard("gather-context")
 
-    skill = next((c for c in candidates if c in CHECKERS), None)
-    if not skill:
-        return None, ""
-
     # Last assistant message text in the file.
     msg = ""
     for r in reversed(records):
@@ -237,6 +280,13 @@ def governing_skill_and_message(records):
             msg = _text_of((r.get("message") or {}).get("content"))
             if msg.strip():
                 break
+
+    skill = next((c for c in candidates if c in CHECKERS), None)
+    if not skill and msg:
+        # No deliverable skill was loaded; fall back to the message's own form.
+        skill = _fingerprint_skill(msg)
+    if not skill:
+        return None, ""
     return skill, msg
 
 
@@ -258,18 +308,25 @@ def main():
     if not skill or not msg:
         return
     verdict, reason = CHECKERS[skill](msg)
+    # The opening check skips when the message is not actually the deliverable
+    # (a clarifying question), and the em-dash check must not fire there either,
+    # so only run it once we know this IS the deliverable (verdict == "ok").
+    if verdict == "ok":
+        em = check_no_em_dash(msg)
+        if em[0] == "violation":
+            verdict, reason = em
     if verdict != "violation":
         return  # compliant, or does not look like the deliverable: leave it alone
     print(json.dumps({
         "decision": "block",
         "reason": (
             "Your response is governed by the `%s` skill's Output contract, and %s "
-            "Re-send the response starting on its first line with the exact Output "
-            "template, nothing before it (no intro, no recap, no scope line). If you "
-            "have a meta-comment, put it AFTER the template. If this turn was not "
-            "actually that deliverable (you were asking a question or pushing back), "
-            "proceed as you were. You will not be blocked again this turn either way."
-            % (skill, reason)
+            "Re-send the response correctly: start on its first line with the exact "
+            "Output template (no intro, recap, or scope line before it), and follow "
+            "the Playbook's no-em-dash rule. If you have a meta-comment, put it AFTER "
+            "the template. If this turn was not actually that deliverable (you were "
+            "asking a question or pushing back), proceed as you were. You will not be "
+            "blocked again this turn either way." % (skill, reason)
         ),
     }))
 

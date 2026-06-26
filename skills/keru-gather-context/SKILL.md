@@ -36,6 +36,7 @@ Reading the single ticket is never enough. You MUST resolve and read its chain b
    - Open the relevant PR(s): `gh pr view <n> --repo <owner>/<repo> --json title,state,url,files,body` and read the changed files (the investigation doc) via `gh pr diff <n> --repo <owner>/<repo>` or by reading the file (locally if cloned, else `gh api repos/<owner>/<repo>/contents/<path>`).
    - If the investigation references a doc path, branch, or another repo, follow it and read it. Do not stop at the Jira ticket.
 5. **From a PR starting point:** read it (`gh pr view <n> --repo <owner>/<repo> --json number,title,headRefName,baseRefName,url,body,files`), take the branch from `headRefName`, scan branch and body for a Jira key (`DBI-\d+`), fetch that ticket, then run steps 1-4.
+6. **When the change depends on deploy or runtime behavior, infra is part of the chain.** If a value or behavior the task touches is governed outside the app repo (a timeout vs the pod's `terminationGracePeriodSeconds`/`preStop`, a resource limit, an env var, a feature flag, a scaling or networking setting), read the infra that sets it before fixing the value: the Helm charts / k8s manifests (commonly the `gitops` repo) and the terraform (commonly a `terraform-modules` repo). Find them with `gh search code` for the setting name across the org, or the local clone if one exists. Do not pick or defend a deploy-coupled value without reading what constrains it; that is a verified fact, not an "infra prerequisite" to punt.
 
 ### Gate before acting
 
@@ -44,6 +45,7 @@ Do not begin the task until you can answer all of these. If any is "no", keep ga
 - Have I read the raw fields and every linked issue, parent, and epic?
 - If an investigation exists, have I read the investigation ticket AND its PR/document, not just its title?
 - Do I understand the rationale behind each acceptance criterion (including any "do NOT do X")?
+- If any value or behavior the task touches is set by deploy/infra (a pod grace period, preStop, resource limit, env var, flag), have I read the chart/terraform that sets it, instead of assuming or deferring it?
 
 Then tell the user what you read (linked tickets, the investigation and where its conclusions live, PRs, files) before proceeding.
 

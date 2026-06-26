@@ -19,7 +19,7 @@ Almost every mistake traces to acting from memory or inference instead of checki
 
 - Before stating something is done or true (tests pass, CI green, no references left, a value is right), confirm it yourself. A ticket, a PR description, someone's claim is input to verify, not fact to repeat. If you did not check it, say so.
 - Before delivering code, re-read the full diff as a strict reviewer would (Copilot included) and fix what they would flag, especially bugs that compile but fail at runtime (struct tags/`omitempty`, config parsed at runtime, nil, edge cases). This self-review is a step you perform, not an intention.
-- Never fabricate APIs, signatures, fields, or behavior. Missing context: search locally, then fetch (gh, go doc), then ask. Never guess.
+- Never fabricate APIs, signatures, fields, or behavior. Missing context: search locally, then fetch (gh, go doc), then ask. Never guess. This holds in every deliverable, a PR reply or review comment included: a statement about how a library or API behaves is a factual claim, never "just commentary", and familiarity with the library is exactly when overconfidence replaces checking. Read the pinned version's source or `go doc` before asserting its behavior. When a claim in a deliverable rests on something you did not verify, say so in line ("not verified") rather than presenting it as fact; when you did verify, the claim can name its source.
 
 ## Load the skill for the task
 

@@ -32,8 +32,11 @@ For any change with real logic, infra, or CI (not a rename/config one-liner), do
 - dead or now-unused code left beside an edit (e.g. a permission/scope still granted after its use was removed),
 - mutable or inconsistent external references (a `@main` ref where the repo pins versions),
 - checks that do not actually cover their case (e.g. `git diff --exit-code` missing untracked files),
+- flaky tests: assertions that depend on timing, real `sleep`/wall-clock, or goroutine scheduling rather than a deterministic signal (the kind that pass locally and fail in CI),
 - behavior silently dropped, and runtime-only bugs.
 
 Then, critically: **validate each finding against the real code before acting on it.** Open the file and confirm the issue is actually present, do not accept or dismiss a finding from assumption (that is the exact failure this guards against). Apply the confirmed ones and re-review. Aim to catch what a reviewer like Copilot would, before delivering, not after.
+
+**A confirmed finding is a blocker to resolve, not a note to ship with.** Flagging a risk in a code comment or PR note is not resolving it: "keep this below X" written next to a value that is not below X is still a bug. If the review confirms a value is wrong (e.g. a timeout exceeds the pod's grace window), verify the real constraint at its source and set a safe value before delivering; do not ship the suspect value with a TODO-style comment, and do not reclassify it as an "infra prerequisite out of scope" when the constraining value is readable via `gh` or a local clone (that is `gather-context`'s deploy/infra step, do it). The value leaves your hands correct, or it does not leave.
 
 Then stop; do not offer to commit.

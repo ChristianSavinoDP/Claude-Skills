@@ -187,6 +187,26 @@ def co_block(slash_cmd, assistant_msg, stop_hook_active=False):
     return bool(out) and json.loads(out).get("decision") == "block"
 
 
+def co_block_noskill(user_text, assistant_msg):
+    """Like co_block but the user prompt is plain text with NO /keru-* command and
+    no Skill tool_use: exercises detection of a deliverable produced WITHOUT its
+    skill ever being loaded (the audit case)."""
+    recs = [
+        {"type": "user", "message": {"content": user_text}},
+        {"type": "assistant", "message": {"content":
+            [{"type": "text", "text": assistant_msg}]}},
+    ]
+    fd, path = tempfile.mkstemp(suffix=".jsonl")
+    with os.fdopen(fd, "w") as f:
+        for r in recs:
+            f.write(json.dumps(r) + "\n")
+    out = subprocess.run([sys.executable, CHECK_OUTPUT],
+                         input=json.dumps({"transcript_path": path, "stop_hook_active": False}),
+                         capture_output=True, text=True).stdout.strip()
+    os.unlink(path)
+    return bool(out) and json.loads(out).get("decision") == "block"
+
+
 def test_check_output():
     # pr-review: compliant verdict-first opening passes; decorated/prose opening blocks.
     good_review = "Approve\n\n### Nits\n`a.go:1`\n```go\nx\n```\nWhy: nit."
@@ -240,17 +260,31 @@ def test_check_output():
           co_block("keru-addressing-pr-comments",
                    "I reviewed both Copilot comments. Here is how I handled them.\n\n**a.go:55**\nApplied."))
 
-    # bot-triage: bold service header first passes; intro blocks.
-    good_bot = "**xapi**\nPRs:\n- bump x — http://u\nSecurity (no fixing PR): none"
+    # bot-triage: bold service header first passes; intro blocks. (Links use ':'
+    # not an em dash, matching the no-em-dash rule the template now follows.)
+    good_bot = "**xapi**\nPRs:\n- bump x: http://u\nSecurity (no fixing PR): none"
     check("bot-triage service-header-first -> no block", not co_block("keru-bot-triage", good_bot))
     check("bot-triage intro before service -> BLOCK",
           co_block("keru-bot-triage",
-                   "I triaged all 3 repos. Here is the rundown.\n\n**xapi**\nPRs:\n- bump x — http://u"))
+                   "I triaged all 3 repos. Here is the rundown.\n\n**xapi**\nPRs:\n- bump x: http://u"))
 
     # The loop cap holds for this hook too.
     check("check-output stop_hook_active cap",
           not co_block("keru-pr-review", "Prose intro that would otherwise block.\n### Blocking\n`a.go:1`",
                        stop_hook_active=True))
+
+    # Em-dash rule (Playbook): a well-formed deliverable with an em dash in prose
+    # is still blocked; em dashes inside code/diffs are allowed; clean passes.
+    em_review = "Approve\n\n### Nits\n`a.go:1`\nWhy: this is fine — but the dash is not."
+    check("em dash in deliverable prose -> BLOCK", co_block("keru-pr-review", em_review))
+    em_in_code = ("Approve\n\n### Nits\n`a.go:1`\n```go\nx := a — b // pasted diff\n```\n"
+                  "Why: the dash above is inside code, allowed.")
+    check("em dash only inside code fence -> no block", not co_block("keru-pr-review", em_in_code))
+    em_ticket = "**Fix the thing**\n\nProblem — with a dash.\n\n### Acceptance Criteria\n- x"
+    check("em dash in ticket prose -> BLOCK", co_block("keru-writing-tickets", em_ticket))
+    # A malformed-opening message is still caught on the opening first, regardless.
+    check("clean deliverable, no dash -> no block",
+          not co_block("keru-pr-review", "Approve\n\n### Nits\n`a.go:1`\nWhy: clean, no dash here."))
 
     # NON-DELIVERABLE turns must never be gated: a turn that asks for missing
     # context or waits on a design decision is not the deliverable, so the gate
@@ -279,6 +313,28 @@ def test_check_output():
     for slash, msg in design_decision:
         check("non-deliverable (design decision pending) not gated: " + slash,
               not co_block(slash, msg))
+
+    # Deliverable produced WITHOUT loading its skill (the audit case): a strong
+    # structural fingerprint still gates it. No /keru-* command, no Skill tool.
+    free = "Logan left a comment on config.go:55, validate again"
+    # addressing: two bold path:line blocks with a prose intro -> caught.
+    check("no-skill addressing (prose + 2 blocks) -> BLOCK",
+          co_block_noskill(free, "Reviewed both.\n\n**a.go:55**\n\nApplied.\n\n**b.go:10**\n\nPushed back."))
+    check("no-skill addressing well-formed (2 blocks) -> no block",
+          not co_block_noskill(free, "**a.go:55**\n\nApplied.\n\n**b.go:10**\n\nPushed back."))
+    # ticket: AC heading fingerprint + prose intro -> caught.
+    check("no-skill ticket (prose + ### AC) -> BLOCK",
+          co_block_noskill(free, "Here is the ticket:\n\n**T**\n\n### Acceptance Criteria\n- x"))
+    # Plain chat must NOT be gated even if it mentions a path:line or a heading.
+    check("no-skill plain chat (one path mention) -> no block",
+          not co_block_noskill(free, "The issue is in config.go:55, middleware.Timeout cancels context."))
+    check("no-skill single bold block (too weak) -> no block",
+          not co_block_noskill(free, "**a.go:55**\n\nJust one note, not the deliverable."))
+    # Known limit (chosen): a review produced without its skill is only caught
+    # when well-formed; a prose-opening review without a verdict is NOT gated,
+    # because firing on a bare '### Questions' would false-positive in chat.
+    check("no-skill review prose-opening -> not gated (accepted limit)",
+          not co_block_noskill(free, "The change looks clean overall.\n\n### Questions\n`a.go:1`"))
 
 
 def main():

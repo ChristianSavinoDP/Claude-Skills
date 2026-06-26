@@ -6,3 +6,4 @@
 # Python artifacts (from helper scripts)
 __pycache__/
 *.pyc
+audit/
