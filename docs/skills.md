@@ -43,6 +43,8 @@ Each skill is also its slash command (type the name, or just describe the task a
 | `keru-writing-tickets` | draft a ticket | output in chat only, never a file |
 | `keru-gather-context` | gather context from a ticket, PR, repo, or URL | read-only; resolves the chain both ways, can read uncloned repos |
 | `keru-bot-triage` | triage dependency/security bot PRs and Dependabot alerts across repos | read-only; uses the `keru-bot-triage` helper, never merges |
+| `keru-debugging` | find why a specific thing fails | validates the root cause with evidence; diagnoses only, does not write the fix; also called by other skills |
+| `keru-responding-to-ci` | get a PR's failing CI green | triages each red check, then calls debugging/writing-code; read-only on CI, never reruns or pushes |
 
 ## Authoring a new skill
 

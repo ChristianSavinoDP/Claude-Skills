@@ -34,6 +34,8 @@ read DBI-1458
 | Draft a ticket | `/keru-writing-tickets` | a short description |
 | Just gather context | `/keru-gather-context` | a key, URL, PR, or repo |
 | Triage dependency/security bots | `/keru-bot-triage` | nothing, or `owner/repo`s |
+| Find why something fails | `/keru-debugging` | a failing test, error, or stack trace |
+| Get a PR's failing CI green | `/keru-responding-to-ci` | a PR link |
 
 **What is safe.** Read commands and local file edits run without prompting. State-changing actions always ask first: `git commit`/`push`, `terraform apply`, PR merges, ticket writes, and discarding uncommitted work (`git reset --hard`, `checkout --`, `restore`, `clean`). `make`, `mise`, and `go tool` are inspected by a hook before running, so a hidden destructive target prompts you. Jira and GitHub always go through the `jira`/`gh` CLIs; a hook blocks WebFetch to those domains. Details in [docs/permissions.md](docs/permissions.md).
 
