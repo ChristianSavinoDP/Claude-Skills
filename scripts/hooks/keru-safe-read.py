@@ -1,19 +1,31 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: auto-approve read-only Bash pipelines.
+"""PreToolUse hook: the single Bash command gate (fast static path + model fallback).
 
-Reads the tool-call JSON on stdin. If the Bash command is composed entirely of
-known read-only commands (grep, find, sed, awk, cat, ls, git log/diff, gh read
-subcommands, ...) with no dangerous flags and no file redirection, it returns a
-PreToolUse "allow" decision so compound read-only pipelines do not prompt. It
-parses pipelines, loops, conditionals, safe redirections (2>/dev/null, 2>&1),
-and command substitution whose contents are themselves read-only.
+Two paths, one hook:
 
-Fail-open: on any doubt it prints nothing and exits 0, deferring to the normal
-permission flow (allow/ask/defaultMode). It never blocks anything.
+  FAST (instant, deterministic): if the command parses as entirely read-only or
+  local-reversible (grep, find, git log/diff, gh/jira read subcommands, go
+  build/test/fmt, etc., with no dangerous flags or file redirection), it returns
+  "allow" immediately. Most commands hit this path and never touch a model.
+
+  SLOW (only for the rest): a command not provably safe used to fall to a
+  separate, always-running agent hook, which added latency to everything. Now
+  this one hook makes a single model call (`dp ai claude`) to judge impact, and
+  fail-safe to "ask" on any failure. So the model is consulted only for genuinely
+  unknown commands, not for the read-only majority, and there is ONE Bash hook
+  instead of a fast one plus an always-slow agent.
+
+The slow-path judgment is the old impact-judge criterion: only remote/infra
+mutation or irreversible destruction is "ask"; everything local and reversible is
+"allow". On the fast path it never blocks; on the slow path it returns allow or
+ask, never deny.
 """
 import json
+import os
 import re
 import shlex
+import shutil
+import subprocess
 import sys
 
 # Commands that only read. A pipeline made solely of these (with safe flags) is
@@ -362,25 +374,103 @@ def command_is_safe(command: str) -> bool:
     return tokens_are_safe(segment)
 
 
+def _emit(decision, reason):
+    print(json.dumps({
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": decision,
+            "permissionDecisionReason": reason,
+        }
+    }))
+
+
+# The single judgment the slow path applies, ported verbatim in spirit from the
+# old impact-judge agent: only remote/infra mutation or irreversible destruction
+# is "ask"; everything local and reversible (including reads over the network and
+# dependency fetches) is "allow". A recognized local-effect dev tool run through
+# a fetch-wrapper (npx/go run/uvx) is allow; an unrecognized remote payload
+# executed as code is ask.
+JUDGE_SYSTEM = (
+    "You decide if a shell command is safe to auto-approve in a dev repo. "
+    "Answer with ONLY one word: ALLOW or ASK.\n"
+    "ALLOW when every part only reads or is LOCAL and REVERSIBLE: reads (local or "
+    "a read-only remote query like `gh ... view/list`, `aws ... describe/list`, a "
+    "GET), analyzes, builds, tests, lints, formats, generates, or writes/deletes "
+    "files in the repo or /tmp (git reverts those); dependency fetches (`go get`, "
+    "`npm/pnpm/yarn install`, `pip install`) that only write local lockfiles/deps; "
+    "a recognized linter/formatter/test tool even via `npx`/`go run <tool>@v`/`uvx`; "
+    "`brew install`. \n"
+    "ASK only when a part: changes remote state or infra (git push, deploy, "
+    "terraform/tofu apply/destroy, kubectl/helm/aws/gcloud/az mutations, docker "
+    "push, a network call that writes to a remote, DB changes even local); OR "
+    "destroys beyond git's reach (`rm -rf` of untracked/outside-repo paths, `git "
+    "reset --hard`, `git checkout -- <files>`, `git restore`, `git clean`); OR "
+    "executes an unrecognized remote payload as code (`curl ... | sh`, `go install` "
+    "of an unfamiliar package). For a compound command, if ANY part is ASK, answer "
+    "ASK. If unsure, answer ASK."
+)
+
+
+def _dp_bin():
+    found = shutil.which("dp")
+    if found:
+        return found
+    base = os.path.expanduser("~/.local/share/mise/installs/dailypay-dp")
+    if os.path.isdir(base):
+        for ver in sorted(os.listdir(base), reverse=True):
+            cand = os.path.join(base, ver, "bin", "dp")
+            if os.path.isfile(cand) and os.access(cand, os.X_OK):
+                return cand
+    return None
+
+
+def judge_with_model(command):
+    """Slow path: ask the model once whether the command is safe. Returns
+    'allow' or 'ask'. Fail-safe: any failure (no dp, timeout, junk) returns
+    'ask', never 'allow', so an unevaluated unknown command always prompts."""
+    dp = _dp_bin()
+    if not dp:
+        return "ask"
+    prompt = JUDGE_SYSTEM + "\n\nCommand:\n" + command
+    try:
+        proc = subprocess.run([dp, "ai", "claude", "-p", "--bare", prompt],
+                              capture_output=True, text=True, timeout=25)
+    except Exception:
+        return "ask"
+    out = (proc.stdout or "").strip().upper()
+    if out.startswith("ALLOW"):
+        return "allow"
+    return "ask"  # ASK, junk, or empty: fail safe
+
+
 def main():
     try:
         data = json.load(sys.stdin)
     except Exception:
-        return  # malformed input: defer
+        return  # malformed input: defer to normal permission flow
     if data.get("tool_name") != "Bash":
         return
     command = (data.get("tool_input") or {}).get("command", "")
     if not command or not isinstance(command, str):
         return
-    if not command_is_safe(command):
-        return  # not provably safe: defer to normal permissions
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "allow",
-            "permissionDecisionReason": "read-only command pipeline",
-        }
-    }))
+
+    # FAST PATH: provably read-only/local-reversible by static parsing. Instant.
+    if command_is_safe(command):
+        _emit("allow", "read-only command pipeline")
+        return
+
+    # The user's own allow-list (rules they approved with "allow always") is
+    # consulted by Claude Code's permission layer separately; we do not duplicate
+    # it here. Anything not provably safe goes to the single slow judgment.
+
+    # SLOW PATH: one model call decides. Fail-safe to ASK. This replaces the old
+    # separate agent hooks (make/mise/go-tool/catch-all), so there is ONE hook,
+    # fast for known-safe commands and model-judged only for the unknowns.
+    decision = judge_with_model(command)
+    if decision == "allow":
+        _emit("allow", "model-judged local/reversible")
+    else:
+        _emit("ask", "not provably safe; model judgment deferred to you")
 
 
 if __name__ == "__main__":

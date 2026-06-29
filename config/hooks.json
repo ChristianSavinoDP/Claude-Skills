@@ -12,11 +12,26 @@
             "type": "command",
             "command": "~/.local/bin/keru-check-output",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "~/.local/bin/keru-judge-output",
+            "timeout": 60
           }
         ]
       }
     ],
     "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/keru-gate-deliverable",
+            "timeout": 10
+          }
+        ]
+      },
       {
         "matcher": "WebFetch",
         "hooks": [
@@ -38,34 +53,7 @@
           {
             "type": "command",
             "command": "~/.local/bin/keru-safe-read",
-            "timeout": 10
-          },
-          {
-            "type": "agent",
-            "if": "Bash(make *)",
-            "statusMessage": "Checking make target for destructive operations...",
-            "timeout": 60,
-            "prompt": "You are a safety reviewer for `make` targets. The tool call is in $ARGUMENTS; extract the command string from `.tool_input.command` and the target name (e.g. 'deploy' from 'make deploy'). Read the Makefile in the current working directory (and any included makefiles) to find that target's recipe and resolve what it actually runs, following variables and sub-make calls as far as you reasonably can.\n\nApply this definition of destructive, decide \"ask\" only for these: it changes remote state or real infrastructure (deploy/release/publish, terraform apply/destroy, kubectl/helm mutations, cloud CLI mutations like delete/terminate/put, docker push, git push), makes a network call that mutates something, or modifies a database (migrate/seed/DROP/DELETE/TRUNCATE) even a local one, since DB data is not recoverable with git.\n\nEverything local and reversible is NOT destructive, decide \"allow\": build, test, lint, format, codegen, and deleting local files or directories (rm, clean, removing build/tmp/generated dirs) - these are local and recoverable via git, so they do not need a prompt.\n\nIf you genuinely cannot tell what the target does, decide \"ask\".\n\nReturn ONLY valid JSON: {\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow|ask\",\"permissionDecisionReason\":\"one concise sentence naming the destructive op or why it is safe\"}}"
-          },
-          {
-            "type": "agent",
-            "if": "Bash(mise *)",
-            "statusMessage": "Checking mise task for destructive operations...",
-            "timeout": 60,
-            "prompt": "You are a safety reviewer for `mise` commands. The tool call is in $ARGUMENTS; extract the command string from `.tool_input.command`. If it runs a task (e.g. `mise run <task>`, or a task shortcut), read the mise config (.mise.toml, mise.toml, .config/mise/config.toml) and any referenced task files in the current working directory to resolve what the task actually executes.\n\nApply this definition of destructive, decide \"ask\" only for these: it changes remote state or real infrastructure (deploy/release/publish, terraform apply/destroy, kubectl/helm mutations, cloud CLI mutations, git push), makes a network call that mutates something, or modifies a database (migrate/seed/DROP/DELETE/TRUNCATE) even a local one, since DB data is not recoverable with git.\n\nEverything local and reversible is NOT destructive, decide \"allow\": build, test, lint, format, codegen, installing pinned tool versions, and deleting local files or directories (rm, clean). These are local and recoverable via git, so they do not need a prompt.\n\nIf you cannot tell, decide \"ask\".\n\nReturn ONLY valid JSON: {\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow|ask\",\"permissionDecisionReason\":\"one concise sentence naming the destructive op or why it is safe\"}}"
-          },
-          {
-            "type": "agent",
-            "if": "Bash(go tool *)",
-            "statusMessage": "Checking go tool for destructive operations...",
-            "timeout": 60,
-            "prompt": "You are a safety reviewer for `go tool` commands. The tool call is in $ARGUMENTS; extract the command string from `.tool_input.command`. `go tool <name>` runs a tool declared in the project's go.mod. Identify the tool and what the invocation does.\n\nApply this definition of destructive, decide \"ask\" only for these: it changes remote state or real infrastructure (deploy/publish/push, terraform apply/destroy, cloud or kubectl/helm mutations), makes a network call that mutates something, or modifies a database (migrate/seed/DROP/DELETE) even a local one, since DB data is not recoverable with git.\n\nEverything local and reversible is NOT destructive, decide \"allow\": formatters (e.g. `templ fmt`), code generators, linters, test helpers, and operations that only write/reformat/delete files in the working tree (recoverable via git).\n\nIf you cannot tell what the tool does, decide \"ask\".\n\nReturn ONLY valid JSON: {\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow|ask\",\"permissionDecisionReason\":\"one concise sentence naming the destructive op or why it is safe\"}}"
-          },
-          {
-            "type": "agent",
-            "statusMessage": "Judging command impact (local vs remote/irreversible)...",
-            "timeout": 60,
-            "prompt": "You judge whether a Bash command is safe to auto-approve. The tool call is in $ARGUMENTS; read the command string from `.tool_input.command`. Read the command and any files it references in the current working directory to understand what it actually does.\n\nThe command may be compound (multiple commands joined by `&&`, `||`, `;`, `|`, or inside a loop/conditional). Evaluate EVERY part: if any single part would be \"ask\", the whole command is \"ask\". Only allow when every part is local and reversible.\n\nThe single question for each part: does it MUTATE remote state/infra or destroy something irreversibly? Reading is always fine, including reading over the network: a read-only API call (`gh api ... --jq`, `gh pr/run/workflow view/list`, `aws/gcloud ... describe/list/get`, a GET request) is ALLOW even though it touches the network. \"Leaves the machine\" is not the test; mutating or destroying is.\n\nDecide \"allow\" when it only reads or is LOCAL and REVERSIBLE: it reads (locally or via a read-only remote query), analyzes, or writes/deletes files in the repo working tree or in /tmp (git can revert repo changes). This includes formatters, codegen, OpenAPI splitters, build, test, lint, moving/copying/creating local files even when they write into the repo, and any read-only network query. Judge a command by what it DOES, not by whether it touches the network or how a tool is obtained. A recognized developer tool whose effect is local (a linter, formatter, type-checker, or test runner such as markdownlint, prettier, eslint, ruff, actionlint, templ) is ALLOW even when run through a fetch-and-run wrapper like `npx <tool>`, `bunx <tool>`, `go run <tool>@version`, or `uvx <tool>`, because its effect is reading or reformatting local files and reporting. For `curl`/`wget`, judge by the request itself: a plain GET that fetches a URL to stdout or to a local file, to read or inspect it, is ALLOW (read-only network). Fetching dependencies counts as local-reversible: `go get`, `go mod download/tidy`, and equivalents fetch over the network but only rewrite local lockfiles (go.mod/go.sum, etc.) without executing the fetched code, and git reverts those files, so they are ALLOW. Project task runners that wrap these (e.g. `make lint`, `make format`, `mise run fmt`) are local-reversible and ALLOW. Also allow this repo's own setup scripts, `scripts/install.sh` and `scripts/uninstall.sh`: they are trusted, set up the local environment (symlinks in ~/.claude, a PATH line, copying helper scripts), and at most run `brew install` for a missing CLI, which is acceptable local setup. For `find ... -exec <cmd> {} \\;` (or `-execdir`, or `xargs <cmd>`), judge the command it runs per file: ALLOW when that command is read-only or local-reversible (e.g. `cat`, `echo`, `grep`, `ls`, `head`, `stat`, `wc`, a formatter), and ASK when it mutates or is unclassifiable (e.g. `rm`, `mv`, `sh -c`/`bash -c` running an opaque script, or any command that would itself be `ask`). The `-exec` flag is not dangerous by itself; the command it invokes is what matters.\n\nDecide \"ask\" only when it: changes remote state or infrastructure (git push, deploy, terraform/tofu apply/destroy, kubectl/helm/aws/gcloud/az mutations, network calls that write to a remote, database changes even local); OR destroys in a way git cannot recover (`rm -rf` of untracked paths or outside the repo, `git reset --hard`, `git checkout -- <files>`, `git restore`, `git clean`); OR runs code of unknown origin you cannot classify: a network package or script you do NOT recognize as a known local-effect dev tool (e.g. `curl ... | sh`, `go install` of an unfamiliar remote package, an opaque downloaded script). The test is recognition and effect: a known linter/formatter/test tool via `npx`/`bunx`/`go run @version`/`uvx` is allow (above); an unrecognized remote payload executed as code is ask.\n\nIf you cannot confidently tell it is local and reversible, decide \"ask\". Never decide \"deny\".\n\nReturn ONLY valid JSON: {\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow|ask\",\"permissionDecisionReason\":\"one concise sentence: what it touches and why local or why it asks\"}}"
+            "timeout": 30
           }
         ]
       }

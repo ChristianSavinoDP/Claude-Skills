@@ -6,11 +6,11 @@ How this repo reduces permission prompts without giving up safety. All of it liv
 
 A tool call is decided by, in order:
 
-1. **PreToolUse hooks** (below): fast read-only check, the inline-interp/WebFetch blocks, the make/mise/go-tool guards, and finally the impact judge. A hook can `allow`, `ask`, or `deny`.
+1. **PreToolUse hooks** (below): the deliverable-write gate, the inline-interp/WebFetch blocks, and the Bash command gate (`keru-safe-read`, fast static path plus a model fallback for the unknowns). A hook can `allow`, `ask`, or `deny`.
 2. **Explicit rules** (`allow` / `ask` / `deny` in `permissions.json`): concrete commands. Precedence is `deny` > `ask` > `allow`.
 3. **`defaultMode`**: what happens to anything no hook decided and no rule matched.
 
-The `ask` list is the important one: it pins the always-prompt commands so they prompt regardless of mode. The `allow` list still exists for fast, obvious cases, but it is no longer exhaustive: the impact judge (the catch-all hook) is what handles the long tail, so the lists below do not need to enumerate every safe command.
+The `ask` list is the important one: it pins the always-prompt commands so they prompt regardless of mode. The `allow` list still exists for fast, obvious cases, but it is no longer exhaustive: the Bash command gate handles the long tail (fast for read-only, a model verdict for the rest), so the lists below do not need to enumerate every safe command. A command you approve with "allow always" is added to `allow` and short-circuits future prompts.
 
 ## defaultMode: acceptEdits
 
@@ -28,7 +28,7 @@ Read-only and local, reversible commands, so they never prompt:
 - Build/test/lint per language: Go (`build`, `test`, `vet`, `fmt`, `mod tidy`, ...), Node (`npm test/ci`, `eslint`, `prettier`, `tsc`, ...), Gradle, Python (`pytest`, `ruff`, ...), .NET
 - Terraform read-only: `plan`, `validate`, `version`, `init`, `fmt`
 - Jira / GitHub reads: `jira issue view/list`, `jira epic list`, `jira me`, `gh pr view/diff/list/checks`, `gh run view/list`, `gh workflow view/list`, `gh api repos/*`
-- The `keru-jira-dev` helper
+- Read-only tool helpers: `keru-jira-dev`, `keru-bot-triage`, and `keru-branch-cleanup audit` (the audit mode only inspects; its `clean` mode is in ask, below)
 
 `make`, `mise`, and `go tool` are deliberately NOT in allow; they go through a hook (below).
 
@@ -38,43 +38,44 @@ Destructive actions (per the playbook's definition), so they prompt even under `
 
 - `git commit`, `git push`
 - Discarding uncommitted work: `git reset --hard`, `git checkout -- <files>`, `git restore`, `git clean`
+- `keru-branch-cleanup clean`: deletes local branches whose upstream is gone (not git-recoverable), so it prompts once before the batch; its `audit` mode is read-only and in allow
 - `terraform apply`, `terraform destroy`
 - Jira writes: `issue create/move/assign/comment/edit`, `epic add/create`, `sprint`
 - GitHub writes / CI triggers: `pr create/merge/review/comment/close/edit`, `run rerun/cancel`, `workflow run/enable/disable`
 
-## The make / mise / go tool hook
+## The Bash command gate (`keru-safe-read`): one hook, fast path + model fallback
 
-`make`, `mise`, and `go tool` are not in allow, because a target name hides what it does: `make deploy` could run `terraform apply`. A static allow rule would also nullify the guard, since an `allow` match short-circuits a hook's `ask`. So instead, a `PreToolUse` agent hook is the only thing that evaluates them.
+Every Bash command goes through a single `PreToolUse` hook with two paths:
 
-Before one of these runs, the hook reads the Makefile / mise config / go.mod tool, resolves what it actually executes, and:
+**Fast path (instant, deterministic).** The script parses the command with shell-aware tokenizing (pipelines, loops, conditionals, safe redirections like `2>/dev/null`, and command substitution whose contents are themselves read-only) and auto-approves it the moment every segment is provably read-only or local-reversible: `grep`, `find`, `sed`, `awk`, `cat`, `ls`, `git log/diff/status`, `go fmt/build/test/list/get/tool` (bare), `pip list/show`, `python -m py_compile`, `mise ls/registry`, `gh`/`jira` read subcommands (`gh api` only as a GET), `base64`, ... with no state-changing flags (`sed -i`/`perl -i`, `find -exec/-delete`; `-i` is dangerous only for sed/perl, not `grep -i`), no file redirection, and no arbitrary interpreter. The read-only majority of commands hit this path and never touch a model.
 
-- forces a confirmation prompt (`permissionDecision: ask`) if it is destructive per the playbook (deploy, terraform apply/destroy, DB mutations, network mutations, ...);
-- lets it run silently if it only builds, tests, lints, formats, generates, or deletes local files;
-- defaults to asking if it cannot tell.
+**Slow path (only for the rest).** A command the fast path cannot prove safe (a `make`/`mise` target whose recipe is hidden, a `docker`/`kubectl`/`aws` call, anything unrecognized) used to fall to a separate agent hook that ran on *every* command and added latency to everything. Now the same hook makes a single model call (`dp ai claude`, see [external-tools.md](external-tools.md)) to judge one question: does any part mutate remote state/infra or destroy something irreversibly?
 
-Trade-off: it adds a few seconds to each `make`/`mise`/`go tool` call. That is the cost of a real safety net over those wrappers.
+- **allow** if local and reversible: reads (locally or a read-only remote query), build/test/lint/format/codegen, writes/deletes files in the repo or `/tmp` (git reverts), dependency fetches (`go get`, `npm/pip install`), a recognized linter/formatter via `npx`/`go run @v`/`uvx`, `brew install`;
+- **ask** if it changes remote state/infra (push, deploy, terraform/kubectl/cloud mutations, DB changes), destroys beyond git's reach (`rm -rf` outside the repo, `reset --hard`, `checkout --`, `restore`, `clean`), or executes an unrecognized remote payload (`curl ... | sh`, `go install` of an unfamiliar package);
+- **fail-safe ask** on any failure (no `dp`, timeout, unclear): an unevaluated unknown command always prompts, never auto-allows. It never denies.
 
-## The read-only pipeline hook
+This is why it is one hook, not a fast one plus an always-slow agent: the model is consulted only for the genuinely unknown commands, so the read-only majority stays instant. A command you approve with "allow always" lands in `permissions.allow` (below) and Claude Code's permission layer handles it, so it does not re-incur the model call.
 
-Allow rules match each subcommand of a compound command independently, so a read-only exploration like `cd x && grep ... | grep -v ...` can still prompt when one piece does not cleanly match. A `PreToolUse` hook (`keru-safe-read`, a fast deterministic script, not an agent) handles that: it parses the command with shell-aware tokenizing (handling pipelines, loops, conditionals, safe redirections like `2>/dev/null`, and command substitution whose contents are themselves read-only) and auto-approves it only if every segment is a known read-only command (`grep`, `find`, `sed`, `awk`, `cat`, `ls`, `git log/diff/status`, `go fmt/build/test/list`, `mise ls/registry`, `gh` read subcommands including `gh api graphql` introspection/queries that carry no `mutation`, `base64`, ...) with no state-changing flags (`sed -i`/`perl -i` in-place edit, `find -exec/-delete`; note `-i` is only treated as dangerous for sed/perl, not for `grep -i`), no file redirection (a redirect operator like `>`, not a `->` inside a quoted string), and no arbitrary interpreter. Anything it cannot prove safe it leaves alone, deferring to the next hook. It never blocks.
+## The deliverable-write gate (`keru-gate-deliverable`)
+
+Streamed chat text cannot be validated before you see it, so a skill deliverable is written to a file first and shared from there. A `PreToolUse` hook on `Write`/`Edit` enforces that mechanically: when the path is `/tmp/keru-deliverable-<skill>.md`, it validates the content against that skill's Output contract (the same checkers as `keru-check-output`: the required opening, no em dashes) before the file is written. If it does not comply, the hook returns `deny`, so the file is never created and Claude is told why and retries. The `<skill>` segment in the filename selects which contract applies. Any other Write/Edit is untouched. This is the one place enforcement is mechanical rather than reactive: unlike a Stop hook (which runs after the message is shown), a denied write means the bad deliverable never reaches disk.
 
 ## The inline-interpreter block
 
 A `PreToolUse` hook (`keru-block-inline-interp`) denies running code inline via `python3 -c`, `node -e`, `ruby -e`, `perl -e`, and tells Claude to use the dedicated tool instead (`yq` for YAML, `jq` for JSON, `actionlint` for workflows). Inline interpreters are arbitrary code and the wrong tool for parsing/validation. Running a script file (`python3 foo.py`) is not blocked, only the inline-code flags.
 
-## The impact-judge hook (catch-all)
-
-Anything `keru-safe-read` does not approve falls to a final `PreToolUse` agent hook that judges one question: does the command leave the machine or is it irreversible? It reads the command and any files it references, then:
-
-- **allow** if local and reversible: reads/analyzes, or writes/deletes files in the repo working tree or `/tmp` (git can revert the repo), including formatters, codegen, OpenAPI splitters, build, test, and moving/copying local files, even when they write into the repo;
-- **ask** if it changes remote state or infra (push, deploy, terraform/kubectl/cloud mutations, DB changes), destroys what git cannot recover (`rm -rf` outside the repo, `reset --hard`, `checkout --`, `restore`, `clean`), or runs unclassifiable code (an arbitrary network package, an opaque script);
-- **ask** whenever it cannot confidently tell it is local; it never denies.
-
-This replaces ever-growing allow lists: instead of enumerating safe commands, the hook judges impact. Cost: a few seconds on commands the fast read-only check did not already approve.
-
 ## The WebFetch guard
 
 A `PreToolUse` hook on `WebFetch` (`keru-block-webfetch`) denies any fetch to a Jira (`*.atlassian.net`) or GitHub URL and tells Claude to use the `jira` / `gh` CLI instead. Those systems are authenticated (WebFetch cannot read them) and have a proper CLI. This is a mechanical backstop for the playbook's "Jira and GitHub: always the CLI, never WebFetch" rule: the deny does not depend on Claude remembering it. Other URLs are unaffected.
+
+## The Stop hooks (skill and output gates)
+
+Three `Stop` hooks (they run when Claude finishes a turn) are mechanical backstops for rules that text alone failed to enforce. All are bounded (at most one block per turn, via `stop_hook_active`) and fail open, so they never wedge a session.
+
+- **`keru-require-skill`:** if you explicitly said "use the X skill" and the turn ended without that skill's `Skill` tool actually firing, it blocks once and tells Claude to invoke it. It only fires on an explicit "use" instruction, not casual mentions or automatic triggering (see [skills.md](skills.md)).
+- **`keru-check-output`:** enforces a deliverable skill's Output contract, the machine-checkable part. Each deliverable skill defines a concrete opening (pr-review opens with the verdict line, writing-tickets/pr-description/bot-triage/addressing-pr-comments with a bold header, investigation with a markdown heading); the hook also forbids em dashes in deliverable prose (including the fenced block pasted into a PR). It checks only the opening and em dashes, only when the message clearly IS the deliverable (a clarifying question or trailing content after a correct opening is left alone), and it detects the deliverable even when the skill was never explicitly loaded, via its structural form.
+- **`keru-judge-output`:** the second layer, for the rules a regex cannot check (tone, claims asserted without verification, a remembered-but-wrong shape). When a turn produces a deliverable for `pr-review`, `writing-tickets`, `pr-description`, `addressing-pr-comments`, or `bot-triage`, it sends the delivered text plus the skill's rules to a headless Claude judge (`dp ai claude`) that reads it as a fresh reviewer and blocks once if it clearly violates the skill. It runs only after the regex gate says the form is right (so it never judges chat or doubles up), and it is excluded for `investigation` because that skill already runs its own adversarial-review subagent. Cost: one short model call per actual deliverable, none on ordinary turns. This is the mechanical version of "have a second pair of eyes check it," for the judgment-level rules Claude kept failing to self-apply.
 
 ## Changing it
 

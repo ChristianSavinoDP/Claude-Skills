@@ -37,9 +37,10 @@ check_docs() {
   local skills_dir="$REPO_DIR/skills"
   local skills_md="$REPO_DIR/docs/skills.md"
 
-  # Each skill is its own slash command (the wrapper layer was removed): the
-  # directory name under skills/ is the command name, so skills are named keru-*.
-  # Every skill on disk must be documented in docs/skills.md.
+  # Each skill is its own slash command: the directory name under skills/ is the
+  # command name, so skills are named keru-*. A typed-only command is just a skill
+  # with disable-model-invocation in its frontmatter, still under skills/. Every
+  # skill on disk must be documented in docs/skills.md.
   for d in "$skills_dir"/*/; do
     [ -d "$d" ] || continue
     local name; name="$(basename "$d")"

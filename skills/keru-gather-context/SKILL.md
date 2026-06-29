@@ -63,7 +63,7 @@ Per the Playbook's "Never fabricate" rule, when context lives in another repo, d
 - A file's contents: `gh api repos/<owner>/<repo>/contents/<path> --jq '.content' | base64 -d` (or `gh api .../contents/<path>?ref=<branch>`).
 - List a directory: `gh api repos/<owner>/<repo>/contents/<dir>`.
 - Search code across a repo or org: `gh search code "<query>" --repo <owner>/<repo>` (or `--owner <org>`).
-- A PR's changed files and diff: `gh pr diff <n> --repo <owner>/<repo>`.
+- A PR's changed files and diff: `gh pr diff <n> --repo <owner>/<repo>` (the pushed PR head, which is what a review must read). If the diff could be large, do not dump it whole into context: measure it first with a pipe (`gh pr diff <n> --repo <owner>/<repo> | wc -l`), then if it is big read the changed files (`--json files`) one at a time rather than the whole diff. Measure with a pipe, not a redirect to a file: `> /tmp/<file>` makes the command prompt for permission, a plain pipe does not. A review is normally of someone else's PR, so the branch is usually not checked out; if it IS checked out (ask if unsure), reading the changed files from the clone is fine and skips the fetch, but only because a review should carry no uncommitted local changes, so confirm the local branch sits at the PR head (up to date with the remote) first.
 
 Prefer the local copy if the repo is already checked out; only go remote when it is not.
 

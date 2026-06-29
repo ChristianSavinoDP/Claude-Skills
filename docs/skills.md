@@ -19,6 +19,8 @@ description: Review a pull request. Use whenever the user asks to review or look
 
 Every skill is also a slash command: type `/keru-<name>` to run it deliberately, with arguments (`/keru-writing-code DBI-1458`). Claude Code merged custom commands into skills, so a skill IS its command; there is no separate wrapper file. The slash name comes from the skill's directory name, which is why every skill here is named `keru-*`: it keeps them grouped and easy to spot in the `/` menu, distinct from built-in and plugin commands. Whatever you type after the name is available to the skill as `$ARGUMENTS`.
 
+**Typed-only skills.** A skill that must never auto-trigger sets `disable-model-invocation: true` in its frontmatter. It still appears as `/keru-<name>` and runs when you type it, but Claude never invokes it on its own from a matching request. This is for actions that should fire only on a deliberate command (e.g. `keru-branch-clean`, which deletes local branches): you do not want it firing because a request looked related. Use a normal skill when you want the flow to trigger on a matching request; add the flag when typing it must be the only way in.
+
 The command is only a shortcut: the playbook ("Load the skill for the task") makes the skill mandatory whenever a request matches it, typed or not, so a skill is never skipped just because you described the task in plain words.
 
 ## The explicit-request safeguard
@@ -45,6 +47,8 @@ Each skill is also its slash command (type the name, or just describe the task a
 | `keru-bot-triage` | triage dependency/security bot PRs and Dependabot alerts across repos | read-only; uses the `keru-bot-triage` helper, never merges |
 | `keru-debugging` | find why a specific thing fails | validates the root cause with evidence; diagnoses only, does not write the fix; also called by other skills |
 | `keru-responding-to-ci` | get a PR's failing CI green | triages each red check, then calls debugging/writing-code; read-only on CI, never reruns or pushes |
+| `keru-branch-audit` | list stale local branches (gone upstream) across the projects root or one named repo | read-only; uses the `keru-branch-cleanup` helper |
+| `keru-branch-clean` | delete stale local branches across the projects root or one named repo | `disable-model-invocation` (typed-only); confirms against an audit list first, skips current + default |
 
 ## Authoring a new skill
 

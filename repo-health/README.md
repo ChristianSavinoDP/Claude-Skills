@@ -14,7 +14,7 @@ repo-health is local to this repo on purpose. It is NOT an operational skill shi
 
 | Check | Kind | What |
 | --- | --- | --- |
-| docs | mechanical | every skill is documented in `docs/` and named `keru-*`; no orphan doc entries |
+| docs | mechanical | every skill is documented in `docs/skills.md` and named `keru-*`; no orphan doc entries |
 | permissions | mechanical | no rule in both `allow` and `ask`; no exact duplicates |
 | installer | mechanical | `install.sh` is idempotent and `uninstall.sh` reverses it (sandboxed `HOME`) |
 | rule drift | semantic | a rule stated in more than one place (playbook vs skill, skill vs skill) |

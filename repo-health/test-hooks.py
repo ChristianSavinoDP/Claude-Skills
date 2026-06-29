@@ -17,9 +17,12 @@ import sys
 import tempfile
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SAFE_READ = os.path.join(REPO, "scripts", "keru-safe-read.py")
-REQUIRE_SKILL = os.path.join(REPO, "scripts", "keru-require-skill.py")
-CHECK_OUTPUT = os.path.join(REPO, "scripts", "keru-check-output.py")
+HOOKS = os.path.join(REPO, "scripts", "hooks")
+SAFE_READ = os.path.join(HOOKS, "keru-safe-read.py")
+REQUIRE_SKILL = os.path.join(HOOKS, "keru-require-skill.py")
+CHECK_OUTPUT = os.path.join(HOOKS, "keru-check-output.py")
+JUDGE_OUTPUT = os.path.join(HOOKS, "keru-judge-output.py")
+GATE = os.path.join(HOOKS, "keru-gate-deliverable.py")
 
 results = []
 
@@ -31,19 +34,27 @@ def check(name, ok):
 # --- keru-safe-read ----------------------------------------------------------
 
 def sr_decision(cmd):
-    """Return 'allow' or 'DEFER' for a Bash command under safe-read."""
+    """Decision for a Bash command under safe-read, with the model slow-path
+    neutralized (dp hidden via empty HOME/PATH) so the test is deterministic and
+    offline: the fast static path still returns 'allow' for provably-safe
+    commands, and anything else hits the slow path which fail-safes to 'ask'.
+    Returns 'allow', 'ask', or 'NONE' (no output)."""
+    env = dict(os.environ)
+    env["HOME"] = "/nonexistent"
+    env["PATH"] = "/usr/bin:/bin"   # no `dp` here -> slow path fail-safes to ask
     stdin = json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}})
     out = subprocess.run([sys.executable, SAFE_READ], input=stdin,
-                         capture_output=True, text=True).stdout.strip()
+                         capture_output=True, text=True, env=env).stdout.strip()
     if not out:
-        return "DEFER"
+        return "NONE"
     try:
         return json.loads(out)["hookSpecificOutput"]["permissionDecision"]
     except Exception:
-        return "DEFER"
+        return "NONE"
 
 
 def test_safe_read():
+    # FAST PATH: provably read-only/local-reversible -> instant allow, no model.
     allow = [
         ("grep pipeline", 'grep -rn "foo" . | head'),
         ("git --no-pager diff", "git --no-pager diff --stat"),
@@ -57,22 +68,30 @@ def test_safe_read():
         (".venv python py_compile", ".venv/bin/python -m py_compile a.py"),
     ]
     for name, cmd in allow:
-        check("safe-read allows: " + name, sr_decision(cmd) == "allow")
+        check("safe-read fast-allows: " + name, sr_decision(cmd) == "allow")
 
-    defer = [
+    # SLOW PATH (model hidden -> fail-safe ASK): not provably safe by static
+    # parsing. With dp present these get a model verdict; with it absent they must
+    # ASK, never silently allow. The key guarantee: an unknown command is never
+    # auto-allowed without a positive judgment.
+    ask = [
         ("git push", "git push origin main"),
         ("rm -rf outside", "rm -rf /tmp/whatever"),
         ("go run remote@version", "go run github.com/a/b@latest fmt ."),
         ("go tool <name>", "go tool templ fmt ."),
         ("pip install", "pip install requests"),
-        ("python -c arbitrary", 'python -c "import os"'),
         ("python script", "python main.py"),
         ("python -m http.server", "python -m http.server"),
+        ("docker ps (unknown to parser)", "docker ps -a"),
         ("py_compile && make", "python -m py_compile a.py && make build"),
         ("gh api POST", "gh api -X POST repos/o/r/issues"),
     ]
-    for name, cmd in defer:
-        check("safe-read defers: " + name, sr_decision(cmd) == "DEFER")
+    for name, cmd in ask:
+        check("safe-read slow-asks (model absent): " + name, sr_decision(cmd) == "ask")
+
+    # Inline interpreters are NOT safe-read's job (a separate block hook denies
+    # them); safe-read should not fast-allow `python -c`.
+    check("safe-read does not fast-allow python -c", sr_decision('python -c "import os"') != "allow")
 
 
 # --- keru-require-skill ------------------------------------------------------
@@ -279,9 +298,20 @@ def test_check_output():
     check("em dash in deliverable prose -> BLOCK", co_block("keru-pr-review", em_review))
     em_in_code = ("Approve\n\n### Nits\n`a.go:1`\n```go\nx := a — b // pasted diff\n```\n"
                   "Why: the dash above is inside code, allowed.")
-    check("em dash only inside code fence -> no block", not co_block("keru-pr-review", em_in_code))
+    check("em dash only inside code fence (```go) -> no block", not co_block("keru-pr-review", em_in_code))
+    em_in_diff = ("Comment\n\n### Nits\n`a.go:1`\n```diff\n- old — value\n```\nWhy: nit.")
+    check("em dash inside ```diff -> no block", not co_block("keru-pr-review", em_in_diff))
     em_ticket = "**Fix the thing**\n\nProblem — with a dash.\n\n### Acceptance Criteria\n- x"
     check("em dash in ticket prose -> BLOCK", co_block("keru-writing-tickets", em_ticket))
+    # The audit's real case (caught live by /keru-pr-review): an em dash inside the
+    # "Comment (paste into the PR)" block, which is FENCED PROSE that goes verbatim
+    # to GitHub. A bare (no-language) fence is prose, so the rule applies there.
+    em_paste = ("Verdict: Comment\n\n### Questions\n`config.go:55`\n\n"
+                "Comment (paste into the PR):\n\n`````\n"
+                "This drops the retry these writes rely on — the lag surfaces as NotFound.\n"
+                "`````\n\nWhy: AC asks to confirm.")
+    check("em dash inside paste-into-PR block (fenced prose) -> BLOCK",
+          co_block("keru-pr-review", em_paste))
     # A malformed-opening message is still caught on the opening first, regardless.
     check("clean deliverable, no dash -> no block",
           not co_block("keru-pr-review", "Approve\n\n### Nits\n`a.go:1`\nWhy: clean, no dash here."))
@@ -322,9 +352,17 @@ def test_check_output():
           co_block_noskill(free, "Reviewed both.\n\n**a.go:55**\n\nApplied.\n\n**b.go:10**\n\nPushed back."))
     check("no-skill addressing well-formed (2 blocks) -> no block",
           not co_block_noskill(free, "**a.go:55**\n\nApplied.\n\n**b.go:10**\n\nPushed back."))
-    # ticket: AC heading fingerprint + prose intro -> caught.
-    check("no-skill ticket (prose + ### AC) -> BLOCK",
-          co_block_noskill(free, "Here is the ticket:\n\n**T**\n\n### Acceptance Criteria\n- x"))
+    # ticket WELL-FORMED but no skill loaded: bold title + AC fingerprints it, so
+    # an em dash or other body issue would still be checked. (Opening is fine here.)
+    check("no-skill ticket well-formed (title + ### AC) -> no block",
+          not co_block_noskill(free, "**Fix the thing**\n\nProblem.\n\n### Acceptance Criteria\n- x"))
+    # Accepted limit: a ticket that OPENS with prose and was produced with no
+    # /keru-* command has no strong fingerprint (the title-first form is the
+    # fingerprint), so it is not gated. Firing on a bare '### Acceptance Criteria'
+    # in free chat would false-positive. With the slash command it IS caught
+    # (see test_check_output's co_block cases).
+    check("no-skill ticket prose-opening -> not gated (accepted limit)",
+          not co_block_noskill(free, "Here is the ticket:\n\n**T**\n\n### Acceptance Criteria\n- x"))
     # Plain chat must NOT be gated even if it mentions a path:line or a heading.
     check("no-skill plain chat (one path mention) -> no block",
           not co_block_noskill(free, "The issue is in config.go:55, middleware.Timeout cancels context."))
@@ -337,10 +375,101 @@ def test_check_output():
           not co_block_noskill(free, "The change looks clean overall.\n\n### Questions\n`a.go:1`"))
 
 
+def judge_blocks(slash_cmd, assistant_msg):
+    """Run keru-judge-output with `dp` made unavailable (empty PATH) so no real
+    model call happens. Tests the GATING logic only: the judge must exit silent
+    (no block) for anything that should not reach the model, and fail-open when
+    `dp` is missing. A live judgment test is too slow/costly for repo-health."""
+    recs = [
+        {"type": "user", "message": {"content":
+            "<command-name>/%s</command-name>\ndo it" % slash_cmd}},
+        {"type": "assistant", "message": {"content":
+            [{"type": "text", "text": assistant_msg}]}},
+    ]
+    fd, path = tempfile.mkstemp(suffix=".jsonl")
+    with os.fdopen(fd, "w") as f:
+        for r in recs:
+            f.write(json.dumps(r) + "\n")
+    env = dict(os.environ)
+    env["PATH"] = "/nonexistent"      # hide `dp`
+    env["HOME"] = "/nonexistent"      # hide the mise fallback path too
+    out = subprocess.run([sys.executable, JUDGE_OUTPUT],
+                         input=json.dumps({"transcript_path": path, "stop_hook_active": False}),
+                         capture_output=True, text=True, env=env).stdout.strip()
+    os.unlink(path)
+    return bool(out) and json.loads(out).get("decision") == "block"
+
+
+def test_judge_gating():
+    # Chat / non-deliverable turn must not reach the judge and must not block.
+    check("judge: chat turn -> no block (no model call)",
+          not judge_blocks("keru-pr-review", "Sure, I'll review the PR shortly."))
+    check("judge: clarifying question -> no block",
+          not judge_blocks("keru-pr-review", "Which PR should I review?"))
+    # A deliverable-shaped turn would reach the model, but with `dp` hidden the
+    # judge fails open (no block) rather than wedging the turn.
+    check("judge: fail-open when dp unavailable -> no block",
+          not judge_blocks("keru-pr-review", "Verdict: Approve\n\n### Nits\n`a.go:1`\nWhy: ok."))
+    # investigation is excluded from the judge (it has its own adversarial review),
+    # so a well-formed investigation never reaches the judge: must not block even
+    # though dp is hidden (proves it short-circuited before the model call).
+    check("judge: investigation excluded -> no block",
+          not judge_blocks("keru-investigation", "## Findings\n\nThe consumer registers via X.\n\n## Sources\n- a"))
+    # The judged set must match the intended four-plus-bot-triage list exactly.
+    import importlib.util as _ilu
+    _s = _ilu.spec_from_file_location("kjo", JUDGE_OUTPUT)
+    _m = _ilu.module_from_spec(_s); _s.loader.exec_module(_m)
+    check("judge: JUDGED_SKILLS is exactly the intended set",
+          _m.JUDGED_SKILLS == {"pr-review", "writing-tickets", "pr-description",
+                               "addressing-pr-comments", "bot-triage"})
+
+
+def gate_denies(file_path, content, tool="Write"):
+    """Run the PreToolUse Write/Edit gate; True if it denies the write."""
+    key = "content" if tool == "Write" else "new_string"
+    payload = {"tool_name": tool, "tool_input": {"file_path": file_path, key: content}}
+    out = subprocess.run([sys.executable, GATE], input=json.dumps(payload),
+                         capture_output=True, text=True).stdout.strip()
+    if not out:
+        return False
+    try:
+        return json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    except Exception:
+        return False
+
+
+def test_write_gate():
+    P = "/tmp/keru-deliverable-pr-review.md"
+    # Malformed deliverable to the gated path -> DENY (file never written).
+    check("write-gate: malformed review -> deny",
+          gate_denies(P, "Verified CI. Now:\n\nVerdict: Approve\n\n### Nits\n`a.go:1`\nWhy: ok."))
+    # Compliant deliverable -> allowed (no deny).
+    check("write-gate: valid review -> allow",
+          not gate_denies(P, "Verdict: Approve\n\n### Nits\n`a.go:1`\nWhy: ok."))
+    # Em dash in the gated file -> deny.
+    check("write-gate: em-dash review -> deny",
+          gate_denies(P, "Verdict: Comment\n\n### Nits\n`a.go:1`\nComment (paste into the PR):\n`````\nreuse it — please\n`````\nWhy: x."))
+    # A NON-deliverable file (normal code) is never gated, even with an em dash.
+    check("write-gate: normal code file -> allow",
+          not gate_denies("/Users/x/main.go", "package main // a — b"))
+    # Ticket path enforces the ticket contract.
+    check("write-gate: malformed ticket -> deny",
+          gate_denies("/tmp/keru-deliverable-writing-tickets.md",
+                      "Here is the ticket:\n\n**T**\n\n### Acceptance Criteria\n- x"))
+    check("write-gate: valid ticket -> allow",
+          not gate_denies("/tmp/keru-deliverable-writing-tickets.md",
+                          "**Fix it**\n\nProblem.\n\n### Acceptance Criteria\n- x"))
+    # Edit tool on a deliverable file is gated too (new_string validated).
+    check("write-gate: Edit malformed review -> deny",
+          gate_denies(P, "Intro prose.\n\nVerdict: Approve\n\n### Nits\n`a.go:1`\nWhy: ok.", tool="Edit"))
+
+
 def main():
     test_safe_read()
     test_require_skill()
     test_check_output()
+    test_judge_gating()
+    test_write_gate()
     failed = [n for n, ok in results if not ok]
     print("=== hook tests: %d run, %d failed ===" % (len(results), len(failed)))
     for n, ok in results:

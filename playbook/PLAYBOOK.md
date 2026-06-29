@@ -41,6 +41,14 @@ This applies on transitions too: if one skill is already loaded and the work shi
 
 When you load any skill, do a scope check: name to yourself, in one line, what this task covers and what it does NOT, folding in any constraint the user gave (deferred a task, scoped something out, asked for analysis only). That boundary catches a task switch before it happens: if you find yourself doing something outside it, stop, it is a different task that needs its own skill. The scope check is internal; surface it to the user only when it changes what you will do (you are about to skip or defer something they should confirm). Never open a deliverable with it. When the skill defines an Output, your visible response is exactly that Output, starting on its first line, with nothing before it: no scope preamble, no "what I verified" recap, no intro. The template is the first thing you write, not context around it.
 
+**A skill deliverable is written to its gated file, never typed straight into chat.** For any skill with an "Output" section a checker covers (`pr-review`, `writing-tickets`, `pr-description`, `addressing-pr-comments`, `bot-triage`), produce it this way, no exceptions:
+
+1. Write it with the Write tool to `/tmp/keru-deliverable-<skill>.md` (e.g. `/tmp/keru-deliverable-pr-review.md`). The `<skill>` in the name selects which Output contract the gate enforces. If a turn produces more than one deliverable (e.g. an investigation and then a ticket), each goes to its own `/tmp/keru-deliverable-<skill>.md`, written and gated separately.
+2. A PreToolUse gate validates the content before the file is written. If it does not comply it DENIES the write (the harness enforces this, not your judgment) and shows you why; the file is not created. Fix the content and Write again until it passes.
+3. **Your chat response is a clickable link to the gated file plus at most one line, nothing else.** Example: `Ticket ready: [keru-deliverable-writing-tickets.md](/tmp/keru-deliverable-writing-tickets.md)` then optionally one sentence (a question, or what to confirm). The deliverable IS the file; the chat only points at it. Do NOT paste the deliverable's contents into the chat, and do NOT wrap it in a summary, a table of what you found, or multiple questions. The validated file is the single source; the chat is a pointer, so whatever prose you are tempted to add does not contaminate it.
+
+A malformed deliverable cannot be written, so it cannot reach the user. The deliverable opens exactly with the skill's Output template, nothing before it. What you verified to produce it (CI, claims checked against source) is internal working: it goes in a `Why:` line in the file, or not at all, never as chat prose around the link.
+
 ## Shared standards
 
 - **Concise, natural, no slop.** No filler, no generic intros, no vague conclusions; write like explaining to a colleague. Any deliverable opens with the substance, organized so a reader finds any point by scanning.

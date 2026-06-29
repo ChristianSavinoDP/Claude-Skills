@@ -83,6 +83,7 @@
       "Bash(jira issue list *)",
       "Bash(keru-jira-dev *)",
       "Bash(keru-bot-triage *)",
+      "Bash(keru-branch-cleanup audit *)",
       "Bash(jira epic list *)",
       "Bash(jira me)",
       "Bash(gh pr list *)",
@@ -97,6 +98,7 @@
       "Bash(gh workflow list *)"
     ],
     "ask": [
+      "Bash(keru-branch-cleanup clean *)",
       "Bash(git commit *)",
       "Bash(git commit)",
       "Bash(git push *)",

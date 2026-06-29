@@ -45,6 +45,9 @@ except (ValueError, OSError) as e:
 settings.pop("todoFeatureEnabled", None)  # set by an older installer; clean it up
 
 managed = settings.pop("_keruManaged", None)
+
+# Permission rules: remove the ones we recorded as managed (needs the marker;
+# rules are plain strings we cannot always tell apart from the user's own).
 if managed:
     perms = settings.get("permissions", {})
     for key in ("allow", "ask", "deny"):
@@ -54,18 +57,30 @@ if managed:
             if not perms[key]:
                 del perms[key]
 
-    hooks = settings.get("hooks", {})
-    drop_hooks = {(e, h) for e, h in managed.get("hooks", [])}
-    for event in list(hooks.keys()):
-        for group in hooks[event]:
-            inner = group.get("hooks", [])
-            group["hooks"] = [h for h in inner
-                              if (event, json.dumps(h, sort_keys=True)) not in drop_hooks]
-        hooks[event] = [g for g in hooks[event] if g.get("hooks")]
-        if not hooks[event]:
-            del hooks[event]
-    if not hooks:
-        settings.pop("hooks", None)
+# Hooks: remove OURS structurally, not just what the marker lists, so a stale or
+# lost marker still leaves a clean settings. Ours = a command at
+# ~/.local/bin/keru-*, any agent-type hook, the playbook SessionStart `cat`, or a
+# null/malformed leftover. Anything else is the user's and is preserved.
+def is_ours(h):
+    if not isinstance(h, dict):
+        return True
+    if h.get("type") == "agent":
+        return True
+    cmd = h.get("command", "")
+    if isinstance(cmd, str) and ("/.local/bin/keru-" in cmd
+                                 or "/playbook/PLAYBOOK.md" in cmd):
+        return True
+    return False
+
+hooks = settings.get("hooks", {})
+for event in list(hooks.keys()):
+    for group in hooks[event]:
+        group["hooks"] = [h for h in (group.get("hooks") or []) if not is_ours(h)]
+    hooks[event] = [g for g in hooks[event] if g.get("hooks")]
+    if not hooks[event]:
+        del hooks[event]
+if not hooks:
+    settings.pop("hooks", None)
 
 with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2)

@@ -116,38 +116,58 @@ for key in ("allow", "ask", "deny"):
         del perms[key]
     managed[key] = list(want)
 
-# Hooks: sync by event+matcher; dedup inner hooks; remove managed hooks gone from config.
+# Hooks: rebuild our managed hooks from config every run, idempotently. Rather
+# than diff against the previous _keruManaged marker (fragile: if the marker is
+# lost or stale, old hooks orphan and pile up, and a half-merge can leave nulls),
+# we identify OUR hooks structurally and replace them wholesale with what the
+# config currently wants. A hook is "ours" if it is a command pointing at
+# ~/.local/bin/keru-* or any agent-type hook (all our agent hooks are ours; we do
+# not author other agent hooks). Everything else in a group is preserved.
 hooks = settings.setdefault("hooks", {})
-prev_hooks = prev.get("hooks", [])  # list of [event, hook-json-string]
-prev_hook_set = {(e, h) for e, h in prev_hooks}
-want_hooks = []
+
+def is_ours(h):
+    if not isinstance(h, dict):
+        return True  # null / malformed leftover: drop it
+    if h.get("type") == "agent":
+        return True
+    cmd = h.get("command", "")
+    return isinstance(cmd, str) and "/.local/bin/keru-" in cmd
+
+# What the config wants, grouped by (event, matcher).
+want = {}  # (event, matcher) -> list of hook dicts, in order
 for event, groups in hooks_frag.items():
     for group in groups:
-        for h in group.get("hooks", []):
-            want_hooks.append((event, group.get("matcher"), h))
-# Remove previously-managed hooks no longer wanted.
-want_hook_set = {(e, json.dumps(h, sort_keys=True)) for e, _, h in want_hooks}
+        key = (event, group.get("matcher"))
+        want.setdefault(key, []).extend(group.get("hooks", []))
+
+# Strip every one of our hooks (and nulls) from existing groups.
 for event in list(hooks.keys()):
     for group in hooks[event]:
-        inner = group.get("hooks", [])
-        group["hooks"] = [h for h in inner
-                          if (event, json.dumps(h, sort_keys=True)) not in prev_hook_set
-                          or (event, json.dumps(h, sort_keys=True)) in want_hook_set]
-    hooks[event] = [g for g in hooks[event] if g.get("hooks")]
-    if not hooks[event]:
-        del hooks[event]
-# Add wanted hooks.
-for event, matcher, h in want_hooks:
+        group["hooks"] = [h for h in (group.get("hooks") or []) if not is_ours(h)]
+
+# Re-add the wanted hooks into their (event, matcher) group, in config order.
+for (event, matcher), hlist in want.items():
     groups = hooks.setdefault(event, [])
     target = next((g for g in groups if g.get("matcher") == matcher), None)
     if target is None:
-        new_group = {"hooks": [h]}
+        target = {"hooks": []}
         if matcher is not None:
-            new_group["matcher"] = matcher
-        groups.append(new_group)
-    elif h not in target.setdefault("hooks", []):
-        target["hooks"].append(h)
-managed["hooks"] = [[e, json.dumps(h, sort_keys=True)] for e, _, h in want_hooks]
+            target["matcher"] = matcher
+        groups.append(target)
+    target.setdefault("hooks", [])
+    for h in hlist:
+        if h not in target["hooks"]:
+            target["hooks"].append(h)
+
+# Drop now-empty groups and events.
+for event in list(hooks.keys()):
+    hooks[event] = [g for g in hooks[event] if g.get("hooks")]
+    if not hooks[event]:
+        del hooks[event]
+
+# Record what we manage (for uninstall); the rebuild above no longer relies on it.
+managed["hooks"] = [[event, json.dumps(h, sort_keys=True)]
+                    for (event, _), hlist in want.items() for h in hlist]
 
 settings["_keruManaged"] = managed
 
@@ -164,14 +184,20 @@ PY
 BIN_DIR="$HOME/.local/bin"
 install_helpers() {
   mkdir -p "$BIN_DIR"
-  install -m 0755 "$REPO_DIR/scripts/keru-jira-dev.sh" "$BIN_DIR/keru-jira-dev"
-  install -m 0755 "$REPO_DIR/scripts/keru-bot-triage.sh" "$BIN_DIR/keru-bot-triage"
-  install -m 0755 "$REPO_DIR/scripts/keru-safe-read.py" "$BIN_DIR/keru-safe-read"
-  install -m 0755 "$REPO_DIR/scripts/keru-block-webfetch.py" "$BIN_DIR/keru-block-webfetch"
-  install -m 0755 "$REPO_DIR/scripts/keru-block-inline-interp.py" "$BIN_DIR/keru-block-inline-interp"
-  install -m 0755 "$REPO_DIR/scripts/keru-require-skill.py" "$BIN_DIR/keru-require-skill"
-  install -m 0755 "$REPO_DIR/scripts/keru-check-output.py" "$BIN_DIR/keru-check-output"
-  echo "installed: keru-jira-dev, keru-bot-triage, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill, keru-check-output in $BIN_DIR"
+  # Tool helpers (called by skills) live in scripts/helpers/; hook scripts (run
+  # by config/hooks.json) live in scripts/hooks/. Both install under the same
+  # bare names on PATH, so the rename is invisible to settings.json and skills.
+  install -m 0755 "$REPO_DIR/scripts/helpers/keru-jira-dev.sh" "$BIN_DIR/keru-jira-dev"
+  install -m 0755 "$REPO_DIR/scripts/helpers/keru-bot-triage.sh" "$BIN_DIR/keru-bot-triage"
+  install -m 0755 "$REPO_DIR/scripts/helpers/keru-branch-cleanup.sh" "$BIN_DIR/keru-branch-cleanup"
+  install -m 0755 "$REPO_DIR/scripts/hooks/keru-safe-read.py" "$BIN_DIR/keru-safe-read"
+  install -m 0755 "$REPO_DIR/scripts/hooks/keru-block-webfetch.py" "$BIN_DIR/keru-block-webfetch"
+  install -m 0755 "$REPO_DIR/scripts/hooks/keru-block-inline-interp.py" "$BIN_DIR/keru-block-inline-interp"
+  install -m 0755 "$REPO_DIR/scripts/hooks/keru-require-skill.py" "$BIN_DIR/keru-require-skill"
+  install -m 0755 "$REPO_DIR/scripts/hooks/keru-check-output.py" "$BIN_DIR/keru-check-output"
+  install -m 0755 "$REPO_DIR/scripts/hooks/keru-judge-output.py" "$BIN_DIR/keru-judge-output"
+  install -m 0755 "$REPO_DIR/scripts/hooks/keru-gate-deliverable.py" "$BIN_DIR/keru-gate-deliverable"
+  echo "installed: keru-jira-dev, keru-bot-triage, keru-branch-cleanup, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill, keru-check-output, keru-judge-output, keru-gate-deliverable in $BIN_DIR"
   ensure_on_path
 }
 
@@ -250,9 +276,10 @@ check_tools() {
 
 link_dir skills
 prune_dangling skills
-# Skills are now their own slash commands; the commands/ wrapper layer was
-# removed. Still prune ~/.claude/commands so a prior install's wrapper symlinks
-# (now source-gone) are cleaned up.
+# Skills are their own slash commands; a typed-only command is a skill with
+# disable-model-invocation in its frontmatter, not a separate commands/ file.
+# Still prune ~/.claude/commands so a prior install's wrapper symlinks (now
+# source-gone) are cleaned up.
 prune_dangling commands
 merge_config
 install_helpers

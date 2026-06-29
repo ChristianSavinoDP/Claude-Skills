@@ -28,7 +28,7 @@ Default: the PR does NOT exist yet. You are describing work already finished on 
 
 ## Output
 
-Two copy-pasteable blocks, nothing else:
+Write this to `/tmp/keru-deliverable-pr-description.md` first (the Playbook's gated-deliverable rule); your chat reply is a link to that file plus at most one line, not its pasted contents. The file has two copy-pasteable blocks, nothing else:
 
 1. **Title**, format `<type>(<scope>): [DBI-XXXX] <summary>`. `<type>` is `feat`/`fix`/`chore`/`docs`. Leave `<scope>` literally as `<scope>` for the user to fill. Real ticket ID. Example: `feat(<scope>): [DBI-1458] disable auto-generated SDK unit tests`.
 2. **Body**, the description following the repo template, in a four-backtick fence so its inner backticks do not break it.

@@ -22,7 +22,7 @@ read DBI-1458
 /keru-pr-review https://github.com/dailypay/partner-integrations/pull/619
 ```
 
-**Common flows** (type the command, or just describe it and the skill triggers):
+**Common flows** (type the command, or just describe it and the skill triggers; `/keru-branch-clean` is typed-only, it never fires on its own):
 
 | You want to | Command | Give it |
 | --- | --- | --- |
@@ -36,8 +36,10 @@ read DBI-1458
 | Triage dependency/security bots | `/keru-bot-triage` | nothing, or `owner/repo`s |
 | Find why something fails | `/keru-debugging` | a failing test, error, or stack trace |
 | Get a PR's failing CI green | `/keru-responding-to-ci` | a PR link |
+| List stale local branches (gone upstream) | `/keru-branch-audit` | nothing (uses saved root) |
+| Delete stale local branches | `/keru-branch-clean` | nothing (uses saved root) |
 
-**What is safe.** Read commands and local file edits run without prompting. State-changing actions always ask first: `git commit`/`push`, `terraform apply`, PR merges, ticket writes, and discarding uncommitted work (`git reset --hard`, `checkout --`, `restore`, `clean`). `make`, `mise`, and `go tool` are inspected by a hook before running, so a hidden destructive target prompts you. Jira and GitHub always go through the `jira`/`gh` CLIs; a hook blocks WebFetch to those domains. Details in [docs/permissions.md](docs/permissions.md).
+**What is safe.** Read commands and local file edits run without prompting. State-changing actions always ask first: `git commit`/`push`, `terraform apply`, PR merges, ticket writes, deleting local branches (`/keru-branch-clean`), and discarding uncommitted work (`git reset --hard`, `checkout --`, `restore`, `clean`). Every other command goes through one Bash gate: read-only and local-reversible ones are approved instantly by a static check, and anything it cannot prove safe (a `make`/`mise` target, a `docker`/`kubectl`/`aws` call) gets a quick model judgment that prompts you if it mutates remote state or destroys something. Jira and GitHub always go through the `jira`/`gh` CLIs; a hook blocks WebFetch to those domains. Details in [docs/permissions.md](docs/permissions.md).
 
 ## Changing how Claude works
 
@@ -48,7 +50,7 @@ Edit an always-on rule in [`playbook/PLAYBOOK.md`](playbook/PLAYBOOK.md); edit a
 - [getting-started.md](docs/getting-started.md): install, tool login, verify.
 - [playbook.md](docs/playbook.md): the rules, and how they load into every session.
 - [skills.md](docs/skills.md): how skills trigger, how to invoke them as `/keru-*`, and the catalogue.
-- [permissions.md](docs/permissions.md): the permission model and the hooks (make/mise/go-tool guard, read-only pipeline, WebFetch block).
+- [permissions.md](docs/permissions.md): the permission model and the hooks (the Bash command gate with its fast static path and model fallback, the deliverable-write gate, the WebFetch and inline-interpreter blocks, the Stop gates).
 - [external-tools.md](docs/external-tools.md): `gh` and `jira` setup, and how context is gathered.
 - [architecture.md](docs/architecture.md): the single-source-of-truth design.
 - [memory.md](docs/memory.md): what belongs in memory vs. in the repo.

@@ -2,6 +2,15 @@
 
 Skills drive external tools through their CLIs, run via Bash. Each must be installed and authenticated once; credentials live with the tool, never in this repo. The installer checks both and prints an `action:` line for anything unconfigured.
 
+## dp ai (headless Claude on Bedrock)
+
+The DailyPay CLI's `dp ai claude` runs Claude Code headless against Bedrock. Two hooks use it as a model in a script:
+
+- `keru-safe-read` calls `dp ai claude -p --bare "<judge prompt>"` to judge a Bash command that is not provably safe by static parsing (the slow path; the fast path needs no model). Fail-safe: if `dp` is missing or the call fails or times out, it returns `ask`, never an unevaluated `allow`.
+- `keru-judge-output` calls it to review a finished deliverable for the rules a regex cannot check.
+
+It is found on PATH as `dp`, or under `~/.local/share/mise/installs/dailypay-dp/*/bin/dp`. `dp ai claude` is non-interactive with `-p`; `--bare` skips hooks/plugins so the judge call cannot recurse into these same gates. No extra setup beyond having `dp` installed and Bedrock auth working. Source: <https://github.com/dailypay/dpcli>.
+
 ## GitHub (gh)
 
 The PR skills use the GitHub CLI.
@@ -23,17 +32,12 @@ brew install ankitpokhrel/jira-cli/jira-cli
 
 1. Create an API token at <https://id.atlassian.com/manage-profile/security/api-tokens>.
 
-2. Export it persistently so it survives new shells and reaches Claude Code. Add it to the `env` block of `~/.claude/settings.json` (loaded into every session, not committed to this public repo). To keep the token out of shell history, run this in your terminal and paste at the hidden prompt:
+2. Export it persistently so it survives new shells and reaches Claude Code. Add it to the `env` block of `~/.claude/settings.json` (loaded into every session, not committed to this public repo). To keep the token out of shell history, run this in your terminal and paste at the hidden prompt (it edits the JSON with `jq`, then swaps the file in atomically):
 
    ```bash
-   read -rs JIRA_API_TOKEN && python3 - "$JIRA_API_TOKEN" <<'PY'
-   import json, os, sys
-   p = os.path.expanduser("~/.claude/settings.json")
-   d = json.load(open(p))
-   d.setdefault("env", {})["JIRA_API_TOKEN"] = sys.argv[1]
-   json.dump(d, open(p, "w"), indent=2); open(p, "a").write("\n")
-   print("JIRA_API_TOKEN written to settings env")
-   PY
+   read -rs JIRA_API_TOKEN && f="$HOME/.claude/settings.json" && \
+     jq --arg t "$JIRA_API_TOKEN" '.env.JIRA_API_TOKEN = $t' "$f" > "$f.tmp" \
+     && mv "$f.tmp" "$f" && echo "JIRA_API_TOKEN written to settings env"
    ```
 
 3. Configure the rest once. From the project URL, the server is `https://<org>.atlassian.net` and the project key is the segment after `/projects/` (e.g. `DBI`):
