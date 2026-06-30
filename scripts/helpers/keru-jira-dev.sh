@@ -4,6 +4,8 @@
 # Usage: keru-jira-dev <ISSUE-KEY>
 # Only does authenticated GETs against /rest/dev-status. No writes, no other
 # endpoints. Reads creds from JIRA_API_TOKEN and ~/.config/.jira/.config.yml.
+# Read-only is relied on by scripts/hooks/keru-safe-read.py (auto-approved
+# without prompting); do not add write paths here.
 set -euo pipefail
 
 KEY="${1:-}"

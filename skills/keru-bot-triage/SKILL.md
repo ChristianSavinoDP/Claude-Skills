@@ -27,7 +27,7 @@ For each repo, run `keru-bot-triage <owner/repo>` and read its JSON (`pull_reque
 
 ## Output
 
-Write this to `/tmp/keru-deliverable-bot-triage.md` first (the Playbook's gated-deliverable rule); your chat reply is a link to that file plus at most one line, not its pasted contents. Group by service (repo). For each service, list every open bot PR as a link, then, only if there are security alerts with no fixing PR, list those below the PRs and link to the page where they are viewed (`security_url`).
+Write this to `/tmp/keru-deliverable-bot-triage.md` first (the Playbook's gated-deliverable rule); your chat reply is a link to that file plus at most one line, not its pasted contents. (Triage spans repos, not one ticket, so no `<id>` suffix; one triage replaces the last.) Group by service (repo). For each service, list every open bot PR as a link, then, only if there are security alerts with no fixing PR, list those below the PRs and link to the page where they are viewed (`security_url`).
 
 Use exactly this shape per service:
 

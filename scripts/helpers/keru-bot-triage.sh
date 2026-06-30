@@ -3,6 +3,8 @@
 # for one repo. Emits a single JSON object the bot-triage skill consumes and
 # turns into a report. Does only authenticated GETs via `gh` (pr list, repo
 # view, dependabot/alerts); no writes, no merges, no comments.
+# Read-only is relied on by scripts/hooks/keru-safe-read.py (auto-approved
+# without prompting); do not add write paths here.
 #
 # Usage: keru-bot-triage <owner/repo>
 #

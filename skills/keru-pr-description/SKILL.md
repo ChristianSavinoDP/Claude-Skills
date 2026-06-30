@@ -25,10 +25,11 @@ Default: the PR does NOT exist yet. You are describing work already finished on 
 - Replace the `DBI-XXXX` placeholder with the real ticket ID.
 - "What Changed": the actual code changes, concisely.
 - "How to Test": only if there are meaningful manual steps (new endpoints, UI, specific scenarios). Purely internal logic covered by automated tests: write "Covered by unit/integration tests" or remove the section. Do not fabricate test steps.
+- **State any merge-order dependency.** If the change references an artifact that only resolves once another unmerged PR lands (a path, runbook, or link added by an in-flight PR), say so in the body: name the PR and that it must merge first. A reference that 404s on the base branch until something else merges is non-actionable if this PR lands first.
 
 ## Output
 
-Write this to `/tmp/keru-deliverable-pr-description.md` first (the Playbook's gated-deliverable rule); your chat reply is a link to that file plus at most one line, not its pasted contents. The file has two copy-pasteable blocks, nothing else:
+Write this to `/tmp/keru-deliverable-pr-description-<id>.md` first, where `<id>` is the ticket key (the Playbook's gated-deliverable rule, so it does not overwrite another PR's description); your chat reply is a link to that file plus at most one line, not its pasted contents. The file has two copy-pasteable blocks, nothing else:
 
 1. **Title**, format `<type>(<scope>): [DBI-XXXX] <summary>`. `<type>` is `feat`/`fix`/`chore`/`docs`. Leave `<scope>` literally as `<scope>` for the user to fill. Real ticket ID. Example: `feat(<scope>): [DBI-1458] disable auto-generated SDK unit tests`.
 2. **Body**, the description following the repo template, in a four-backtick fence so its inner backticks do not break it.

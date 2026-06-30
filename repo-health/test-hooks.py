@@ -66,6 +66,19 @@ def test_safe_read():
         ("pip list piped", "pip list | grep -i boto"),
         ("python -m py_compile", "python -m py_compile src/x.py"),
         (".venv python py_compile", ".venv/bin/python -m py_compile a.py"),
+        ("keru-jira-dev", "keru-jira-dev DBI-1477"),
+        ("keru-jira-dev probe", 'keru-jira-dev DBI-1477 2>/dev/null || echo "NO_DEV_HELPER_OR_EMPTY"'),
+        ("keru-bot-triage", "keru-bot-triage o/r"),
+        ("keru-branch-cleanup audit", "keru-branch-cleanup audit ~/Documents/GitHub"),
+        # gh api with an EXPLICIT GET method: -f/-F are query-string params, not a
+        # POST body, so the search is read-only. The two real-session forms.
+        ("gh api -X GET search/code",
+         'gh api -X GET search/code -f q=\'"trace-analytics alert" datadog_monitor in:file language:hcl\' --jq \'.items[].html_url\' 2>&1 | head -20 || echo "SEARCH_FAILED"'),
+        ("gh api -X GET search/code chained",
+         'echo "==="; gh api -X GET search/code -f q=\'datadog_monitor in:file\' --jq \'.items[].html_url\' 2>&1 | head -10; echo "---"; gh api -X GET search/code -f q=\'a in:file\' --jq \'.total_count\' 2>&1 | head -3'),
+        ("gh api --method GET", "gh api --method GET search/code -f q=foo --jq .total_count"),
+        ("gh api --method=GET", "gh api --method=GET search/code -f q=foo"),
+        ("gh api -XGET glued", "gh api -XGET search/code -f q=foo"),
     ]
     for name, cmd in allow:
         check("safe-read fast-allows: " + name, sr_decision(cmd) == "allow")
@@ -85,6 +98,11 @@ def test_safe_read():
         ("docker ps (unknown to parser)", "docker ps -a"),
         ("py_compile && make", "python -m py_compile a.py && make build"),
         ("gh api POST", "gh api -X POST repos/o/r/issues"),
+        # No explicit method but field flags present: gh auto-switches GET->POST,
+        # so this is a write and must defer.
+        ("gh api -f no method (implicit POST)", "gh api repos/o/r/issues -f title=x"),
+        ("gh api --method PATCH", "gh api --method PATCH repos/o/r/issues/1 -f state=closed"),
+        ("keru-branch-cleanup clean", "keru-branch-cleanup clean ~/Documents/GitHub"),
     ]
     for name, cmd in ask:
         check("safe-read slow-asks (model absent): " + name, sr_decision(cmd) == "ask")
@@ -452,6 +470,30 @@ def test_write_gate():
     # A NON-deliverable file (normal code) is never gated, even with an em dash.
     check("write-gate: normal code file -> allow",
           not gate_denies("/Users/x/main.go", "package main // a — b"))
+
+    # Disambiguating <id> suffix (Jira key / PR number) is still gated: the skill
+    # must resolve from the stem despite the suffix, so a malformed deliverable to
+    # an id-suffixed path is denied and a valid one is allowed.
+    check("write-gate: id-suffixed review (PR num) malformed -> deny",
+          gate_denies("/tmp/keru-deliverable-pr-review-3254.md",
+                      "Intro prose.\n\nVerdict: Approve\n\n### Nits\n`a.go:1`\nWhy: ok."))
+    check("write-gate: id-suffixed review (PR num) valid -> allow",
+          not gate_denies("/tmp/keru-deliverable-pr-review-3254.md",
+                          "Verdict: Approve\n\n### Nits\n`a.go:1`\nWhy: ok."))
+    # A skill name that itself contains hyphens must resolve with an id suffix too.
+    check("write-gate: hyphenated skill + Jira id malformed -> deny",
+          gate_denies("/tmp/keru-deliverable-addressing-pr-comments-DBI-1477.md",
+                      "I reviewed both.\n\n**a.go:55**\n\nApplied."))
+    check("write-gate: hyphenated skill + Jira id valid -> allow",
+          not gate_denies("/tmp/keru-deliverable-addressing-pr-comments-DBI-1477.md",
+                          "**a.go:55**\n\nApplied a rewrite.\n\n**b.md:10**\n\nPushed back."))
+    # Em dash still caught with an id suffix present.
+    check("write-gate: id-suffixed ticket em-dash -> deny",
+          gate_denies("/tmp/keru-deliverable-writing-tickets-DBI-9.md",
+                      "**Fix it**\n\nProblem — dash.\n\n### Acceptance Criteria\n- x"))
+    # A stem that names no known skill is not gated (allowed), even malformed.
+    check("write-gate: unknown skill stem -> allow",
+          not gate_denies("/tmp/keru-deliverable-nonsense-skill.md", "Whatever — prose."))
     # Ticket path enforces the ticket contract.
     check("write-gate: malformed ticket -> deny",
           gate_denies("/tmp/keru-deliverable-writing-tickets.md",

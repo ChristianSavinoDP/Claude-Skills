@@ -26,7 +26,7 @@ For a bug, give observed vs expected in the paragraph. An investigation's criter
 
 ## Output
 
-Write this to `/tmp/keru-deliverable-writing-tickets.md` first (the Playbook's gated-deliverable rule); your chat reply is a link to that file plus at most one line, not its pasted contents. The file has this shape and nothing else (note the size):
+Write this to `/tmp/keru-deliverable-writing-tickets-<id>.md` first, where `<id>` is the related ticket key when there is one (parent/epic/source), else a short slug (the Playbook's gated-deliverable rule, so one draft does not overwrite another); your chat reply is a link to that file plus at most one line, not its pasted contents. The file has this shape and nothing else (note the size):
 
 ```text
 **Align companion's PR CI with the partner-integrations twin**

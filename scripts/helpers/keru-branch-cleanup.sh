@@ -5,6 +5,10 @@
 # scanned). The remote is never touched beyond a read-only `git fetch --prune`
 # to make the gone state accurate.
 #
+# scripts/hooks/keru-safe-read.py auto-approves `audit` (read-only) but not
+# `clean`, keying on the mode being positional arg 1. Keep `audit` read-only and
+# the mode as arg 1, or the gate will mis-classify.
+#
 # Usage: keru-branch-cleanup <mode> <repo-or-root-dir>
 #   mode = audit  -> read-only: list gone branches per repo, delete nothing
 #   mode = clean  -> delete the gone branches (skips never-pushed, current, main)

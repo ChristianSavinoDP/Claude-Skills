@@ -111,6 +111,13 @@ GH_READONLY = {
     ("search",),  # gh search code/prs/...
 }
 
+# Project helpers installed on PATH by the installer (scripts/helpers/). These
+# are read-only by construction: keru-jira-dev does authenticated GETs against
+# Jira's dev-status endpoint, keru-bot-triage does only gh reads (no merges or
+# comments). keru-branch-cleanup is NOT here: it is read-only only in `audit`
+# mode, so it is handled separately below (`clean` deletes branches and defers).
+KERU_READONLY_HELPERS = {"keru-jira-dev", "keru-bot-triage"}
+
 # find write actions: unambiguous, only find uses them, so they are dangerous
 # on any command that bears them.
 DANGEROUS_FLAG_TOKENS = {"-exec", "-execdir", "-delete", "-fprint", "-fprintf",
@@ -272,12 +279,35 @@ def tokens_are_safe(tokens) -> bool:
             # free query; a mutation or a file-loaded query defers to the judge.
             return _gh_graphql_is_read(tokens[2:])
         if sub1 == "api":
-            # gh api is read-only only as a GET: no method override, no field data.
-            bad = {"-X", "--method", "-f", "-F", "--field", "--raw-field", "--input"}
-            for t in tokens[2:]:
-                # Catch -X POST, --method=POST, and the glued -XPOST form.
-                if t in bad or t.split("=")[0] in bad or t.startswith("-X"):
-                    return False
+            # gh api defaults to GET, but field flags (-f/-F) auto-switch it to
+            # POST. So a GET is read-only when EITHER the method is pinned to GET
+            # (`-X GET`/`--method GET`: field flags then become query-string
+            # params) OR there is no method and no field flags. An explicit
+            # non-GET method mutates; field flags with no explicit method imply a
+            # POST. Parse the method (`-X V`, `-XV`, `--method V`, `--method=V`).
+            api_args = tokens[2:]
+            method = None
+            i = 0
+            while i < len(api_args):
+                t = api_args[i]
+                if t in ("-X", "--method"):
+                    method = api_args[i + 1] if i + 1 < len(api_args) else ""
+                    i += 2
+                    continue
+                if t.startswith("-X") and len(t) > 2:
+                    method = t[2:]
+                elif t.startswith("--method="):
+                    method = t[len("--method="):]
+                i += 1
+            if method is not None:
+                if method.upper() != "GET":
+                    return False  # explicit mutating method
+            else:
+                # No explicit method: field/input flags would switch GET to POST.
+                bad = {"-f", "-F", "--field", "--raw-field", "--input"}
+                for t in api_args:
+                    if t in bad or t.split("=")[0] in bad:
+                        return False
         elif (sub1, sub2) not in GH_READONLY and (sub1,) not in GH_READONLY:
             return False
     elif base == "jira":
@@ -285,6 +315,13 @@ def tokens_are_safe(tokens) -> bool:
         sub1 = rest[0] if rest else ""
         sub2 = rest[1] if len(rest) > 1 else ""
         if sub1 not in JIRA_READONLY_SOLO and (sub1, sub2) not in JIRA_READONLY_PAIR:
+            return False
+    elif base in KERU_READONLY_HELPERS:
+        return True  # read-only project helpers; their args are issue keys/repos
+    elif base == "keru-branch-cleanup":
+        # Read-only only in `audit` mode; `clean` deletes branches, so defer it.
+        sub = tokens[1] if len(tokens) > 1 else ""
+        if sub != "audit":
             return False
     elif base not in READ_ONLY:
         return False

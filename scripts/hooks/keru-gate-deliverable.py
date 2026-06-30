@@ -8,9 +8,13 @@ decision actually prevents the write. So a malformed deliverable file cannot be
 created, the model is shown why, and it retries until the content passes.
 
 Scope: only files whose name marks them as a deliverable draft, by convention
-  /tmp/keru-deliverable-<skill>.md   (e.g. /tmp/keru-deliverable-pr-review.md)
-The <skill> in the name selects which Output contract to validate against. Any
-other Write/Edit is ignored (the hook allows it by staying silent).
+  /tmp/keru-deliverable-<skill>.md            (e.g. keru-deliverable-pr-review.md)
+  /tmp/keru-deliverable-<skill>-<id>.md       (e.g. keru-deliverable-pr-review-3254.md)
+The optional <id> (a Jira key or PR number) keeps concurrent or sequential
+deliverables of the same skill from overwriting each other. The <skill> selects
+which Output contract to validate against; since skill names contain hyphens
+(pr-review, addressing-pr-comments), the skill is resolved against the known set,
+not split on a hyphen. Any other Write/Edit is ignored (the hook stays silent).
 
 Validation reuses keru-check-output's checkers (one source of truth). Fail-open
 on anything it cannot parse, so it never wedges a normal write: it only ever
@@ -24,8 +28,25 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Deliverable draft filename convention: keru-deliverable-<skill>.md
-NAME_RE = re.compile(r"keru-deliverable-([a-z-]+)\.md$")
+# Deliverable draft filename convention: keru-deliverable-<skill>[-<id>].md
+# The suffix may carry a Jira key or PR number (uppercase, digits) to keep
+# deliverables from overwriting each other, so it is NOT restricted to [a-z-].
+# The skill is resolved from the captured stem against the known checker set.
+NAME_RE = re.compile(r"keru-deliverable-(.+)\.md$")
+
+
+def _resolve_skill(stem, known):
+    """Given the filename stem after 'keru-deliverable-' (e.g. 'pr-review' or
+    'pr-review-3254' or 'addressing-pr-comments-DBI-1'), return the skill it
+    names, or None. Skill names contain hyphens and an optional id suffix
+    follows another hyphen, so match the longest known skill that the stem
+    equals or starts with (followed by '-'). Longest-first avoids a shorter
+    skill shadowing a longer one; no known skill is a hyphen-prefix of another
+    today, but this stays correct if that changes."""
+    for skill in sorted(known, key=len, reverse=True):
+        if stem == skill or stem.startswith(skill + "-"):
+            return skill
+    return None
 
 
 def _load_checkers():
@@ -59,16 +80,16 @@ def main():
         return
     tool_input = data.get("tool_input") or {}
     path = tool_input.get("file_path") or ""
-    m = NAME_RE.search(path)
+    m = NAME_RE.search(os.path.basename(path))
     if not m:
         return  # not a deliverable draft file: not ours, allow
 
     co = _load_checkers()
     if co is None:
         return  # cannot validate: allow rather than wedge
-    skill = co._norm(m.group(1))
-    if skill not in co.CHECKERS:
-        return  # unknown skill in the name: allow
+    skill = _resolve_skill(m.group(1), co.CHECKERS)
+    if skill is None:
+        return  # stem names no known skill: allow
 
     # The content being written. Write gives the full content; Edit gives the
     # post-edit string. For Edit we only have new_string (the inserted text), not

@@ -60,7 +60,7 @@ Within the ticket scope?
 
 ## Output
 
-Write this to `/tmp/keru-deliverable-pr-review.md` first (the Playbook's gated-deliverable rule); your chat reply is a link to that file plus at most one line, not its pasted contents. Anything you want to add for the user is that one line, after the link, never mixed into the file.
+Write this to `/tmp/keru-deliverable-pr-review-<pr>.md` first, where `<pr>` is the PR number (the Playbook's gated-deliverable rule, so a new review does not overwrite an earlier one); your chat reply is a link to that file plus at most one line, not its pasted contents. Anything you want to add for the user is that one line, after the link, never mixed into the file.
 
 NOT a prose essay or conversation log. OPEN with a one-line verdict, format `Verdict: <Approve|Request changes|Comment>` (the `Verdict:` label then exactly one of the three words, nothing else on that line). Then findings grouped under `### Blocking` / `### Nits` / `### Questions` (omit empty groups). Each finding is exactly:
 

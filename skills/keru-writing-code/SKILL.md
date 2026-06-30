@@ -14,12 +14,13 @@ Procedure for implementing a code change. The Playbook's always-on rules still a
 
 ## Code-specific rules
 
-- **No comments unless the "why" is non-obvious.**
+- **No comments unless the "why" is non-obvious.** A comment that restates what the code already shows is noise: delete it. Match the neighbors' comment density and length: if the file uses single-line comments, do not add a multi-line block, and never pair a doc comment with inline comments that repeat it. The bar is the non-obvious why, nothing else; default to fewer.
 - **Reuse existing packages.** If a package, helper, or utility exists for what you need, use it; do not write a parallel implementation.
 - **Follow the reference code's reusable shape.** When you model new code on existing code, match how that reference is structured. If the reference lives in a shared/reusable package, write yours the same way, not as an inline copy buried in one caller.
 - **Match the file's naming, style, and idioms** (read a neighbor before writing).
 - **Tests for non-trivial new logic.** When you add logic with branches, edge cases, parsing, or anything whose failure only surfaces at runtime, add unit tests in the same PR, following the repo's existing test pattern, and tell the user you did and why. Two limits: only if the repo already tests that kind of code (do not introduce a framework where there is none), and not for trivial changes (config, rename, wiring). Each test covers a distinct behavior. If the user says no tests, skip them.
 - **Do not silently drop existing behavior.** Removing or changing behavior something may depend on (a retry, an error path, a fallback, a default) is a serious change, not a cleanup: call it out and confirm it is intended.
+- **Human-facing text says what the code observes, not the cause it presumes.** When authoring an alert, log, error message, or comment, separate what is measured from what may have caused it. A symptom-based check (running-vs-desired tasks, healthy-host count) must not claim to detect the root cause; describe the symptom and list possible causes instead.
 
 ## Before delivering
 
@@ -33,10 +34,14 @@ For any change with real logic, infra, or CI (not a rename/config one-liner), do
 - mutable or inconsistent external references (a `@main` ref where the repo pins versions),
 - checks that do not actually cover their case (e.g. `git diff --exit-code` missing untracked files),
 - flaky tests: assertions that depend on timing, real `sleep`/wall-clock, or goroutine scheduling rather than a deterministic signal (the kind that pass locally and fail in CI),
+- human-facing text that overstates behavior: an alert, log, or error message (or a code comment) asserting a cause or downstream effect the code does not actually observe (a symptom-based check, e.g. running-vs-desired tasks or healthy-host count, described as detecting the root cause),
+- references that do not resolve: a path, URL, or runbook link the change emits that does not exist on the base branch, with the cross-PR merge-order dependency not flagged,
 - behavior silently dropped, and runtime-only bugs.
 
 Then, critically: **validate each finding against the real code before acting on it.** Open the file and confirm the issue is actually present, do not accept or dismiss a finding from assumption (that is the exact failure this guards against). Apply the confirmed ones and re-review. Aim to catch what a reviewer like Copilot would, before delivering, not after.
 
 **A confirmed finding is a blocker to resolve, not a note to ship with.** Flagging a risk in a code comment or PR note is not resolving it: "keep this below X" written next to a value that is not below X is still a bug. If the review confirms a value is wrong (e.g. a timeout exceeds the pod's grace window), verify the real constraint at its source and set a safe value before delivering; do not ship the suspect value with a TODO-style comment, and do not reclassify it as an "infra prerequisite out of scope" when the constraining value is readable via `gh` or a local clone (that is `gather-context`'s deploy/infra step, do it). The value leaves your hands correct, or it does not leave.
+
+**When the change references an in-flight artifact, flag the merge-order dependency.** If the diff emits a path, URL, or runbook link that only resolves once another unmerged PR lands, state that dependency explicitly to the user and in the PR description; do not link and move on. A reference that 404s on the base branch until something else merges is non-actionable if this change lands first.
 
 Then stop; do not offer to commit.

@@ -39,10 +39,20 @@ A skill that reads DataDog logs/errors for a set of services, audits what is fai
 - Services to audit live in memory (a personal list, like bot-triage's repo list): no default, ask if absent, persist on request.
 - Read-only on DataDog; building/filing the ticket is a separate, user-triggered step via `keru-writing-tickets`.
 
+**Access (RESOLVED): `pup`, Datadog's official agent-oriented CLI** (<https://github.com/DataDog/pup>, docs <https://docs.datadoghq.com/cli/>). Investigated 2026-06-30 via `gh`:
+
+- Fits the repo's "authenticated CLI, never WebFetch" rule exactly: a real CLI like `gh`/`jira`, JSON output, OAuth2+PKCE auth (no long-lived `DD_API_KEY`/`DD_APP_KEY` to store). Installs via `brew tap datadog-labs/pack && brew install datadog-labs/pack/pup`, auth via `pup auth login`.
+- The commands the audit needs already exist:
+  - `pup error-tracking issues search` with `--state`/`--team`/`--assignee`: this IS "what is failing", better than parsing raw logs.
+  - `pup logs search --query="status:error" --from="1h"` and `pup logs aggregate`: error volume, spikes, top messages per service/window.
+  - `pup events search`, `pup metrics query` for surrounding context.
+- This supersedes the earlier REST-helper / MCP options; use `pup` directly, allowlisting its read-only subcommands (search/list/aggregate/query) the way `gh` reads are allowlisted.
+
 **Open questions:**
 
-- Access (the crux, needs investigation first): how does Claude reach DataDog within the repo's "authenticated CLI, never WebFetch" rule? Options to investigate: a `keru-*` helper hitting the DataDog REST API (logs/events) with `DD_API_KEY`+`DD_APP_KEY` from env; an official DataDog CLI (like gh/jira); or a DataDog MCP server (but the repo deliberately avoids MCP, so that would be an exception). Investigate what DataDog offers before committing.
-- Report scope: depends on what the chosen access exposes. Either per-service "what is failing" (volume, spikes, top exceptions) or a simpler threshold "many errors yes/no + count". Define after access is settled.
+- Report scope: per-service "what is failing" via `error-tracking issues search` + `logs aggregate` (volume, spikes, top issues) vs a simpler threshold "many errors yes/no + count". Define when building.
+- Ticket handoff: `pup` also has `cases create` / `cases jira` (write, remote, OUT of scope for the read-only audit). The audit stays read-only and feeds `keru-writing-tickets`; do not wire pup's write commands in.
+- Permissions: add `pup` read subcommands to allow; keep any `pup ... create/update/delete` in ask (write = remote mutation).
 
 ### 8. Turn this repo into a Claude Code plugin
 
