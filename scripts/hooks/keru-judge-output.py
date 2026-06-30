@@ -34,12 +34,22 @@ import sys
 # turns the regex gate inspects (and nothing else).
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+# Load keru-check-output's checkers. The installed copy has NO .py extension, so
+# spec_from_file_location would return a loaderless spec and fail silently; use an
+# explicit SourceFileLoader and try the extensionless installed name too.
+_co = None
 try:
     import importlib.util
-    _spec = importlib.util.spec_from_file_location(
-        "keru_check_output", os.path.join(HERE, "keru-check-output.py"))
-    _co = importlib.util.module_from_spec(_spec)
-    _spec.loader.exec_module(_co)
+    from importlib.machinery import SourceFileLoader
+    for _p in (os.path.join(HERE, "keru-check-output.py"),
+               os.path.join(HERE, "keru-check-output"),
+               os.path.expanduser("~/.local/bin/keru-check-output")):
+        if os.path.isfile(_p):
+            _loader = SourceFileLoader("keru_check_output", _p)
+            _spec = importlib.util.spec_from_loader("keru_check_output", _loader)
+            _co = importlib.util.module_from_spec(_spec)
+            _loader.exec_module(_co)
+            break
 except Exception:
     _co = None
 

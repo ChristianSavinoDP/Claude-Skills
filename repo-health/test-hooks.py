@@ -463,6 +463,26 @@ def test_write_gate():
     check("write-gate: Edit malformed review -> deny",
           gate_denies(P, "Intro prose.\n\nVerdict: Approve\n\n### Nits\n`a.go:1`\nWhy: ok.", tool="Edit"))
 
+    # Regression: the INSTALLED copies have no .py extension. spec_from_file_location
+    # infers the loader from the extension, so an extensionless gate used to fail to
+    # load its checkers and fail-open (let em dashes through). Replicate that exact
+    # condition: copy gate + check-output to a temp dir WITHOUT .py and confirm the
+    # gate still loads checkers and denies. This is the bug the repo-path tests miss.
+    import shutil
+    d = tempfile.mkdtemp()
+    try:
+        shutil.copy(GATE, os.path.join(d, "keru-gate-deliverable"))
+        shutil.copy(CHECK_OUTPUT, os.path.join(d, "keru-check-output"))
+        payload = {"tool_name": "Write", "tool_input": {
+            "file_path": "/tmp/keru-deliverable-writing-tickets.md",
+            "content": "**T**\n\nx — y.\n\n### Acceptance Criteria\n- a"}}
+        out = subprocess.run([sys.executable, os.path.join(d, "keru-gate-deliverable")],
+                             input=json.dumps(payload), capture_output=True, text=True).stdout.strip()
+        denied = bool(out) and json.loads(out).get("hookSpecificOutput", {}).get("permissionDecision") == "deny"
+        check("write-gate: extensionless (installed-style) still denies em dash", denied)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
 
 def main():
     test_safe_read()

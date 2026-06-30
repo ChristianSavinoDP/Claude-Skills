@@ -29,14 +29,21 @@ NAME_RE = re.compile(r"keru-deliverable-([a-z-]+)\.md$")
 
 
 def _load_checkers():
+    # The installed copies have NO .py extension, and spec_from_file_location
+    # infers the loader from the extension, so it returns a spec with loader=None
+    # for an extensionless file and the import fails silently (which made the
+    # installed gate fail-open and let em dashes through). Pass an explicit
+    # SourceFileLoader so the file loads as Python regardless of its name.
+    from importlib.machinery import SourceFileLoader
     for path in (os.path.join(HERE, "keru-check-output.py"),
                  os.path.join(HERE, "keru-check-output"),
                  os.path.expanduser("~/.local/bin/keru-check-output")):
         if os.path.isfile(path):
             try:
-                spec = importlib.util.spec_from_file_location("keru_check_output", path)
+                loader = SourceFileLoader("keru_check_output", path)
+                spec = importlib.util.spec_from_loader("keru_check_output", loader)
                 mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
+                loader.exec_module(mod)
                 return mod
             except Exception:
                 continue
