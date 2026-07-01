@@ -29,7 +29,13 @@ Read the relevant code and docs directly; track each claim back to evidence you 
 
 ## Output
 
-The document itself, nothing around it. Your visible response OPENS with a markdown heading (`#` or `##`), the first finding or the question being answered. No generic intro, no "here is the investigation", no scope line, no recap of what you read before the first heading. The first character of your response is `#`. A meta-comment, if any, goes after the document.
+The document itself, nothing around it. Its first line is a markdown heading (`#` or `##`), the first finding or the question being answered: no generic intro, no "here is the investigation", no scope line, no recap of what you read before that heading.
+
+Write it through the Playbook's gated-deliverable flow, so the em-dash, heading-open, and English checks run mechanically before it reaches you as a doc:
+
+1. Write the document to `/tmp/keru-deliverable-investigation-<id>.md` (`<id>` = the ticket key, e.g. `keru-deliverable-investigation-DBI-971.md`). The PreToolUse gate validates it (opens with a heading, no em dashes, English) and DENIES the write if not; fix and Write again until it passes.
+2. Once it passes, write the validated content to its real home in the target repo (`docs/investigations/.../investigation.md`, matching the format you checked in "Before starting").
+3. Your chat response is a clickable link to the doc plus at most one line (a meta-comment or what to confirm), nothing else. Do not paste the document into chat.
 
 ## Before delivering
 
