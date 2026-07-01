@@ -111,6 +111,9 @@ def main():
     em = co.check_no_em_dash(content)
     if em[0] == "violation":
         problems.append(em[1])
+    lang = co.check_english(content)
+    if lang[0] == "violation":
+        problems.append(lang[1])
 
     if not problems:
         return  # compliant: allow the write

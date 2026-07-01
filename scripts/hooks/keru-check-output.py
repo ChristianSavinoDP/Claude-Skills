@@ -152,6 +152,8 @@ CHECKERS = {
         "pr-description", m, lambda msg, first: bool(PRDESC_BODY.search(msg)) or opens_bold(first)),
     "bot-triage": lambda m: check_bold_open(
         "bot-triage", m, lambda msg, first: ("PRs:" in msg) or ("Security" in msg) or opens_bold(first)),
+    "datadog-audit": lambda m: check_bold_open(
+        "datadog-audit", m, lambda msg, first: ("Volume:" in msg) or ("Ticket candidates:" in msg) or opens_bold(first)),
     "addressing-pr-comments": lambda m: check_bold_open(
         "addressing-pr-comments", m,
         lambda msg, first: bool(BOLD_HEADER_ANY.search(msg)) or bool(PATHLINE_REF_ANY.search(msg)) or opens_bold(first)),
@@ -245,6 +247,47 @@ def check_no_em_dash(msg):
             "semicolons, colons, or parentheses). Near: %r." % snippet)
 
 
+# Playbook "All deliverables in English" rule. The chat language is separate
+# (Spanish here), so a deliverable accidentally written in the chat language is
+# THE failure mode this guards. Deterministic and conservative like the em-dash
+# check: it flags only text it can strongly prove is not English, so a genuine
+# English deliverable never trips it, and the LLM judge (keru-judge-output) is the
+# semantic backstop for subtler cases this deliberately lets pass. Two signals,
+# both near-zero false-positive: Spanish-only opening punctuation (¿ ¡), which
+# never occurs in English, and a cluster of >=3 distinct high-signal Spanish words
+# that are neither English words nor plausible bare code identifiers.
+SPANISH_ONLY_PUNCT = ("¿", "¡")
+SPANISH_MARKERS = {
+    "que", "los", "las", "una", "unos", "unas", "por", "para", "pero",
+    "como", "cuando", "donde", "porque", "esto", "estos", "estas", "este",
+    "esta", "más", "está", "están", "también", "según", "sus", "del",
+    "cerrar", "actualizar", "queda", "quedan", "tiene", "tienen",
+    "seguridad", "vulnerabilidades", "repositorios", "duplicados",
+}
+
+
+def check_english(msg):
+    """Playbook 'All deliverables in English' rule, on deliverable prose. Returns
+    ('ok'|'violation', reason). Conservative: only flags text it can strongly
+    prove is non-English. Code is stripped first (like the em-dash check), so a
+    foreign identifier, path, or package name is not counted."""
+    prose = _strip_code(msg)
+    for p in SPANISH_ONLY_PUNCT:
+        if p in prose:
+            return ("violation",
+                    "it is not in English (the Playbook requires every deliverable "
+                    "in English regardless of chat language); found Spanish-only "
+                    "punctuation %r." % p)
+    words = set(re.findall(r"[a-záéíóúñü]+", prose.lower()))
+    hits = sorted(words & SPANISH_MARKERS)
+    if len(hits) >= 3:
+        return ("violation",
+                "it is not in English (the Playbook requires every deliverable in "
+                "English regardless of chat language); found Spanish text, e.g. %s."
+                % ", ".join(repr(h) for h in hits[:5]))
+    return "ok", ""
+
+
 # Strong structural fingerprints: forms that ONLY a given deliverable produces,
 # so finding one identifies the message as that deliverable from its shape alone.
 # This is the PRIMARY way the gate decides what it is looking at: the deliverable
@@ -266,6 +309,9 @@ def _fingerprint_skill(msg):
     # bot-triage: a bold service header AND the per-service "PRs:" line.
     if first.startswith("**") and re.search(r"(?m)^PRs:", msg):
         return "bot-triage"
+    # datadog-audit: a bold service header AND the per-service "Volume:" line.
+    if first.startswith("**") and re.search(r"(?m)^Volume:", msg):
+        return "datadog-audit"
     # addressing-pr-comments: two or more bold path:line headers (one block per
     # comment). One alone is too weak; two distinct comment blocks is the form.
     pathheaders = re.findall(r"(?m)^\*\*[\w./-]+\.\w+:\d+\*\*", msg)
@@ -387,6 +433,10 @@ def main():
         em = check_no_em_dash(msg)
         if em[0] == "violation":
             verdict, reason = em
+        else:
+            lang = check_english(msg)
+            if lang[0] == "violation":
+                verdict, reason = lang
     if verdict != "violation":
         _diag(data, fired="yes", skill=skill, action="pass-" + verdict)
         return  # compliant, or does not look like the deliverable: leave it alone
@@ -439,6 +489,9 @@ def check_file_cli():
     em = check_no_em_dash(msg)
     if em[0] == "violation":
         problems.append(em[1])
+    lang = check_english(msg)
+    if lang[0] == "violation":
+        problems.append(lang[1])
     if problems:
         print("NOT COMPLIANT (%s):" % skill)
         for p in problems:

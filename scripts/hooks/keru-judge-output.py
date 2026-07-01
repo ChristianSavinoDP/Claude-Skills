@@ -69,6 +69,7 @@ JUDGED_SKILLS = {
     "pr-description",
     "addressing-pr-comments",
     "bot-triage",
+    "datadog-audit",
 }
 
 # What the judge checks. Deliberately NOT the machine-checkable things the regex
@@ -80,6 +81,7 @@ JUDGE_CRITERIA = """You are a strict compliance reviewer for a deliverable produ
 2. UNVERIFIED / UNCITED CLAIMS: does it state how a library, API, field, or external system behaves as fact without either naming a verified source or marking it "not verified"? Asserting behavior from apparent memory is a violation.
 3. INVENTED RULES / FABRICATION: does it assert a rule, constraint, or fact that it does not actually support? (Stating a violation without quoting the rule, claiming something was verified that was not.)
 4. SHAPE DRIFT: beyond the first line (already checked), does the body follow the skill's required structure, or did it substitute a remembered-but-wrong shape (prose essay where structured findings are required, etc.)?
+5. LANGUAGE: the Playbook requires every deliverable in English regardless of the chat language. If the deliverable's prose is written in another language (Spanish, etc.), that is a violation. Proper nouns, code, package names, and identifiers do not count.
 
 Be precise and conservative: only flag a CLEAR violation you can point to. A judgment call that is defensible is NOT a violation. If it complies, say so."""
 

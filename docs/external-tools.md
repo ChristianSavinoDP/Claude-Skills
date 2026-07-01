@@ -1,6 +1,6 @@
 # External Tools
 
-Skills drive external tools through their CLIs, run via Bash. Each must be installed and authenticated once; credentials live with the tool, never in this repo. The installer checks both and prints an `action:` line for anything unconfigured.
+Skills drive external tools through their CLIs, run via Bash. Each must be installed and authenticated once; credentials live with the tool, never in this repo. The installer checks each and prints an `action:` line for anything unconfigured.
 
 ## dp ai (headless Claude on Bedrock)
 
@@ -54,6 +54,20 @@ brew install ankitpokhrel/jira-cli/jira-cli
    Config (server, login, project, board) is stored in `~/.config/.jira/`. Nothing secret touches this repo. The persisted token only reaches Claude's sessions after a restart, since the `env` block loads at session start.
 
 Verify with `jira me` (returns your user) and `jira issue view <KEY> --plain`.
+
+## DataDog (pup)
+
+The `keru-datadog-audit` skill reads DataDog error-tracking and error logs through [pup](https://github.com/DataDog/pup), DataDog's agent-oriented CLI (docs <https://docs.datadoghq.com/cli/>). It fits the repo's "authenticated CLI, never WebFetch" rule the same way `gh`/`jira` do: a real CLI with JSON output and OAuth2+PKCE auth, so no long-lived `DD_API_KEY`/`DD_APP_KEY` is stored in this repo.
+
+```bash
+brew tap datadog-labs/pack
+brew install datadog-labs/pack/pup
+pup auth login
+```
+
+`pup auth login` opens a browser for an interactive OAuth flow, so it is a one-time step you run yourself (the installer cannot do it). Verify with `pup auth status` (returns `authenticated: true` and the token's scopes). Tokens are short-lived and auto-refresh; re-run `pup auth login` if `auth status` reports no token.
+
+Only `pup`'s read subcommands are used and allowlisted (`error-tracking issues search/get`, `logs search/aggregate/list/query`, `events search/list`, `metrics query/search/list`, `auth status`); every write (`cases create/jira`, `metrics submit`, `logs archives/metrics delete`) is in `ask` and out of scope for the read-only audit. See [permissions.md](permissions.md) for the exact boundary.
 
 ## Giving Claude task context
 

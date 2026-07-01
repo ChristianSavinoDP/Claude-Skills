@@ -272,6 +272,21 @@ check_tools() {
     TOOLS_OK=0
     echo "action: jira not installed and brew unavailable. See docs/external-tools.md."
   fi
+
+  # pup (DataDog CLI): needed by the datadog-audit skill. The fully-qualified
+  # formula auto-taps datadog-labs/pack. Auth is an interactive browser OAuth
+  # flow the installer cannot do, so it only reports the action.
+  if ensure_installed pup datadog-labs/pack/pup; then
+    if pup auth status >/dev/null 2>&1 && pup auth status 2>/dev/null | grep -q '"authenticated": true'; then
+      echo "ok: pup installed and authenticated"
+    else
+      TOOLS_OK=0
+      echo "action: pup installed but not authenticated. Run: pup auth login"
+    fi
+  else
+    TOOLS_OK=0
+    echo "action: pup not installed and brew unavailable. See docs/external-tools.md."
+  fi
 }
 
 link_dir skills

@@ -8,7 +8,7 @@ A guide to working with Claude the way I want: a short playbook of always-on rul
 scripts/install.sh
 ```
 
-That wires the repo into Claude Code (skills, which double as `/keru-*` commands, permissions, the playbook) and checks the `gh` and `jira` tools. Restart Claude Code afterward. Full steps and tool login in [docs/getting-started.md](docs/getting-started.md).
+That wires the repo into Claude Code (skills, which double as `/keru-*` commands, permissions, the playbook) and checks the `gh`, `jira`, and `pup` (DataDog) tools. Restart Claude Code afterward. Full steps and tool login in [docs/getting-started.md](docs/getting-started.md).
 
 ## Using it day to day
 
@@ -34,12 +34,13 @@ read DBI-1458
 | Draft a ticket | `/keru-writing-tickets` | a short description |
 | Just gather context | `/keru-gather-context` | a key, URL, PR, or repo |
 | Triage dependency/security bots | `/keru-bot-triage` | nothing, or `owner/repo`s |
+| Audit DataDog errors for services | `/keru-datadog-audit` | nothing, or service names (routes to debugging or a ticket) |
 | Find why something fails | `/keru-debugging` | a failing test, error, or stack trace |
 | Get a PR's failing CI green | `/keru-responding-to-ci` | a PR link |
 | List stale local branches (gone upstream) | `/keru-branch-audit` | nothing (uses saved root) |
 | Delete stale local branches | `/keru-branch-clean` | nothing (uses saved root) |
 
-**What is safe.** Read commands and local file edits run without prompting. State-changing actions always ask first: `git commit`/`push`, `terraform apply`, PR merges, ticket writes, deleting local branches (`/keru-branch-clean`), and discarding uncommitted work (`git reset --hard`, `checkout --`, `restore`, `clean`). Every other command goes through one Bash gate: read-only and local-reversible ones are approved instantly by a static check, and anything it cannot prove safe (a `make`/`mise` target, a `docker`/`kubectl`/`aws` call) gets a quick model judgment that prompts you if it mutates remote state or destroys something. Jira and GitHub always go through the `jira`/`gh` CLIs; a hook blocks WebFetch to those domains. Details in [docs/permissions.md](docs/permissions.md).
+**What is safe.** Read commands and local file edits run without prompting. State-changing actions always ask first: `git commit`/`push`, `terraform apply`, PR merges, ticket writes, DataDog writes (`pup cases create`, `metrics submit`), deleting local branches (`/keru-branch-clean`), and discarding uncommitted work (`git reset --hard`, `checkout --`, `restore`, `clean`). Every other command goes through one Bash gate: read-only and local-reversible ones are approved instantly by a static check, and anything it cannot prove safe (a `make`/`mise` target, a `docker`/`kubectl`/`aws` call) gets a quick model judgment that prompts you if it mutates remote state or destroys something. Jira and GitHub always go through the `jira`/`gh` CLIs; a hook blocks WebFetch to those domains. Details in [docs/permissions.md](docs/permissions.md).
 
 ## Changing how Claude works
 
@@ -51,6 +52,6 @@ Edit an always-on rule in [`playbook/PLAYBOOK.md`](playbook/PLAYBOOK.md); edit a
 - [playbook.md](docs/playbook.md): the rules, and how they load into every session.
 - [skills.md](docs/skills.md): how skills trigger, how to invoke them as `/keru-*`, and the catalogue.
 - [permissions.md](docs/permissions.md): the permission model and the hooks (the Bash command gate with its fast static path and model fallback, the deliverable-write gate, the WebFetch and inline-interpreter blocks, the Stop gates).
-- [external-tools.md](docs/external-tools.md): `gh` and `jira` setup, and how context is gathered.
+- [external-tools.md](docs/external-tools.md): `gh`, `jira`, and `pup` (DataDog) setup, and how context is gathered.
 - [architecture.md](docs/architecture.md): the single-source-of-truth design.
 - [memory.md](docs/memory.md): what belongs in memory vs. in the repo.

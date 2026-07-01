@@ -334,6 +334,29 @@ def test_check_output():
     check("clean deliverable, no dash -> no block",
           not co_block("keru-pr-review", "Approve\n\n### Nits\n`a.go:1`\nWhy: clean, no dash here."))
 
+    # Language rule (Playbook: all deliverables in English regardless of chat
+    # language). A well-formed ticket whose PROSE is Spanish is blocked; its
+    # English twin passes. This is the live bug: chat is Spanish, deliverable must
+    # not be. Detection is conservative (Spanish-only punctuation, or >=3 marker
+    # words), so an English deliverable that merely mentions a foreign package name
+    # is not tripped.
+    es_ticket = ("**Cerrar los PRs duplicados**\n\nHay que cerrar los PRs duplicados "
+                 "y actualizar las vulnerabilidades.\n\n### Acceptance Criteria\n"
+                 "- Los duplicados quedan cerrados.")
+    check("Spanish ticket prose -> BLOCK", co_block("keru-writing-tickets", es_ticket))
+    en_ticket = ("**Close the duplicate PRs**\n\nClose the stale duplicate bot PRs and "
+                 "remediate the alerts.\n\n### Acceptance Criteria\n- The duplicates are closed.")
+    check("English ticket prose -> no block", not co_block("keru-writing-tickets", en_ticket))
+    # Spanish-only inverted punctuation alone is enough to prove non-English.
+    es_punct = "**Arreglar esto**\n\n¿Por qué falla?\n\n### Acceptance Criteria\n- x"
+    check("Spanish inverted punctuation -> BLOCK", co_block("keru-writing-tickets", es_punct))
+    # False-positive guard: an English deliverable naming foreign identifiers/pkgs
+    # in code (path-to-regexp, a repo slug) must NOT be flagged as non-English.
+    en_with_code = ("**xapi**\nPRs:\n- bump `path-to-regexp` in los-angeles-svc: http://u\n"
+                    "Security (no fixing PR): none")
+    check("English deliverable with foreign code tokens -> no block",
+          not co_block("keru-bot-triage", en_with_code))
+
     # NON-DELIVERABLE turns must never be gated: a turn that asks for missing
     # context or waits on a design decision is not the deliverable, so the gate
     # must stay silent. These are the false-positives the gate must not produce.
@@ -439,7 +462,7 @@ def test_judge_gating():
     _m = _ilu.module_from_spec(_s); _s.loader.exec_module(_m)
     check("judge: JUDGED_SKILLS is exactly the intended set",
           _m.JUDGED_SKILLS == {"pr-review", "writing-tickets", "pr-description",
-                               "addressing-pr-comments", "bot-triage"})
+                               "addressing-pr-comments", "bot-triage", "datadog-audit"})
 
 
 def gate_denies(file_path, content, tool="Write"):
@@ -491,6 +514,21 @@ def test_write_gate():
     check("write-gate: id-suffixed ticket em-dash -> deny",
           gate_denies("/tmp/keru-deliverable-writing-tickets-DBI-9.md",
                       "**Fix it**\n\nProblem — dash.\n\n### Acceptance Criteria\n- x"))
+    # Language rule (Playbook: all deliverables in English). The live bug: a ticket
+    # drafted in the chat language (Spanish) was written because nothing enforced
+    # English. A well-formed-but-Spanish ticket to the gated path must now DENY.
+    check("write-gate: Spanish ticket -> deny",
+          gate_denies("/tmp/keru-deliverable-writing-tickets-ES.md",
+                      "**Cerrar los PRs duplicados**\n\nHay que cerrar los PRs "
+                      "duplicados y actualizar las vulnerabilidades de seguridad.\n\n"
+                      "### Acceptance Criteria\n- Los duplicados quedan cerrados."))
+    # The English translation of the same ticket is allowed (proves it is the
+    # language, not the content, that was blocked).
+    check("write-gate: English ticket -> allow",
+          not gate_denies("/tmp/keru-deliverable-writing-tickets-EN.md",
+                          "**Close the duplicate PRs**\n\nClose the stale duplicate "
+                          "bot PRs and remediate the security alerts.\n\n"
+                          "### Acceptance Criteria\n- The duplicates are closed."))
     # A stem that names no known skill is not gated (allowed), even malformed.
     check("write-gate: unknown skill stem -> allow",
           not gate_denies("/tmp/keru-deliverable-nonsense-skill.md", "Whatever — prose."))

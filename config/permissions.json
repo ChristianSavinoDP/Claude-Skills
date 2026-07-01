@@ -95,7 +95,20 @@
       "Bash(gh run view *)",
       "Bash(gh run list *)",
       "Bash(gh workflow view *)",
-      "Bash(gh workflow list *)"
+      "Bash(gh workflow list *)",
+      "Bash(pup error-tracking issues search *)",
+      "Bash(pup error-tracking issues get *)",
+      "Bash(pup logs search *)",
+      "Bash(pup logs aggregate *)",
+      "Bash(pup logs list *)",
+      "Bash(pup logs query *)",
+      "Bash(pup events search *)",
+      "Bash(pup events list *)",
+      "Bash(pup metrics query *)",
+      "Bash(pup metrics search *)",
+      "Bash(pup metrics list *)",
+      "Bash(pup auth status *)",
+      "Bash(pup auth status)"
     ],
     "ask": [
       "Bash(keru-branch-cleanup clean *)",
@@ -129,7 +142,13 @@
       "Bash(gh run cancel *)",
       "Bash(gh workflow run *)",
       "Bash(gh workflow enable *)",
-      "Bash(gh workflow disable *)"
+      "Bash(gh workflow disable *)",
+      "Bash(pup cases create *)",
+      "Bash(pup cases jira *)",
+      "Bash(pup metrics submit *)",
+      "Bash(pup metrics metadata update *)",
+      "Bash(pup logs archives delete *)",
+      "Bash(pup logs metrics delete *)"
     ]
   }
 }

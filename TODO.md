@@ -28,31 +28,13 @@ Built as [docs/memory.md](docs/memory.md), linked from README and getting-starte
 
 Built as the `keru-branch-cleanup` helper + two skills: `keru-branch-audit` (read-only list) and `keru-branch-clean` (delete in one batch). `keru-branch-clean` is typed-only via `disable-model-invocation: true` in its frontmatter, so the destructive flow never auto-triggers on a matching request; it runs only when typed, prompts once via the `keru-branch-cleanup clean` `ask` rule, and the audit list informs that confirmation beforehand. No `commands/` wrapper layer: each skill is its own slash command (architecture.md + skills.md updated). Helper scans the projects root from memory (`projects-root`), `fetch --prune` per repo, deletes `[gone]` with `git branch -D`, skips current + default, leaves never-pushed (no upstream = out of scope). Verified: audit on 25 real clones, clean end-to-end on a disposable repo.
 
-### 7. DataDog error audit -> ticket
+### 7. DataDog error audit -> ticket (DONE)
 
-A skill that reads DataDog logs/errors for a set of services, audits what is failing (error volume, spikes, top exceptions/messages), and builds a diagnostic report. The report later feeds `keru-writing-tickets` to open a ticket. DataDog is read-only; the ticket is a separate step the user triggers. Same chain shape as debugging -> writing-code.
+Built as the `keru-datadog-audit` skill (its own `/keru-datadog-audit` command). Reads DataDog error-tracking and error logs for a set of services via `pup` (DataDog's CLI), analyzes the errors, and writes a gated diagnostic report per service. Diagnoses and stops; never writes a fix. Works service by service (gather runs in parallel across services, then each is analyzed): groups by recurrence (N occurrences of one identical error = one problem, not N) and judges attribution (ours vs downstream/partner/client/noise) from the actual error lines. When the log is opaque (e.g. extend-api's generic "500 Server Error", no stacktrace), it confirms which side raises the error by reading the owning repo LOCALLY under `[[projects-root]]` (grep the clone, not more API calls), a light attribution read; if that still does not settle it, the error is tagged UNESTABLISHED and routed to `keru-debugging` (which owns reproduce -> isolate -> verify; the audit does NOT restate that, DRY). A recurring + ours error is marked a ticket candidate, and the skill OFFERS to open it, chaining to `keru-writing-tickets` only on the user's yes (`jira issue create` still prompts). Output is a gated deliverable `/tmp/keru-deliverable-datadog-audit.md` (bold-header-per-service form, same checker family as bot-triage): added its checker to `keru-check-output.py` (CHECKERS + fingerprint), the judge (`keru-judge-output.py` JUDGED_SKILLS, since attribution is a claim to verify), and the gated-skill lists in the playbook and permissions.md. Services live in memory (`[[datadog-services]]`, service names only, never the errors), no default, ask-if-absent, persist-on-request, like bot-triage's repo list.
 
-**Verified 2026:** no DataDog access on this machine today, no CLI, no `DD_*`/`DATADOG_*` env, no config on disk (`dd` on PATH is the Unix disk tool, not DataDog). Access is the blocker to resolve first.
+Access: `pup` installed via `brew install datadog-labs/pack/pup` (v1.6.0) and authenticated with `pup auth login` (OAuth2+PKCE, short-lived token, no `DD_*` keys stored). The installer now checks/installs it and reports auth like `gh`/`jira`. Wired the same way as `gh`: read subcommands allowlisted in both `config/permissions.json` and the static gate (`keru-safe-read.py`, anchored-prefix match after skipping pup's global flags), every `pup` write (`cases create/jira`, `metrics submit`, `metrics metadata update`, `logs archives/metrics delete`) pinned to `ask`. Docs updated: external-tools.md (pup section), permissions.md (read/write lists + fast-path), skills.md + README (catalogue).
 
-**Decisions:**
-
-- Services to audit live in memory (a personal list, like bot-triage's repo list): no default, ask if absent, persist on request.
-- Read-only on DataDog; building/filing the ticket is a separate, user-triggered step via `keru-writing-tickets`.
-
-**Access (RESOLVED): `pup`, Datadog's official agent-oriented CLI** (<https://github.com/DataDog/pup>, docs <https://docs.datadoghq.com/cli/>). Investigated 2026-06-30 via `gh`:
-
-- Fits the repo's "authenticated CLI, never WebFetch" rule exactly: a real CLI like `gh`/`jira`, JSON output, OAuth2+PKCE auth (no long-lived `DD_API_KEY`/`DD_APP_KEY` to store). Installs via `brew tap datadog-labs/pack && brew install datadog-labs/pack/pup`, auth via `pup auth login`.
-- The commands the audit needs already exist:
-  - `pup error-tracking issues search` with `--state`/`--team`/`--assignee`: this IS "what is failing", better than parsing raw logs.
-  - `pup logs search --query="status:error" --from="1h"` and `pup logs aggregate`: error volume, spikes, top messages per service/window.
-  - `pup events search`, `pup metrics query` for surrounding context.
-- This supersedes the earlier REST-helper / MCP options; use `pup` directly, allowlisting its read-only subcommands (search/list/aggregate/query) the way `gh` reads are allowlisted.
-
-**Open questions:**
-
-- Report scope: per-service "what is failing" via `error-tracking issues search` + `logs aggregate` (volume, spikes, top issues) vs a simpler threshold "many errors yes/no + count". Define when building.
-- Ticket handoff: `pup` also has `cases create` / `cases jira` (write, remote, OUT of scope for the read-only audit). The audit stays read-only and feeds `keru-writing-tickets`; do not wire pup's write commands in.
-- Permissions: add `pup` read subcommands to allow; keep any `pup ... create/update/delete` in ask (write = remote mutation).
+Verified end-to-end against real data (2026-07-01), which corrected several `--help` inaccuracies now documented in the skill: `error-tracking issues search` requires `--state`/`--from`/`--limit` + exactly one of `--track`/`--persona` (mutually exclusive); time format is `7d`/`1h` not `now-7d`; search returns only id + total_count (get an id for `error_type`/`error_message`/`service`, there is no title field); `logs aggregate` output is `.data.buckets[].computes.c0`; `group-by @error.type` is empty for services that log plain `msg`/`stacktrace` (error-tracking issues are the real top-exceptions source). Gate tested: all pup reads (incl. `--output`/`--org`/`--no-agent` global-flag forms) allow, all writes + `auth login/logout` defer to ask.
 
 ### 8. Turn this repo into a Claude Code plugin
 

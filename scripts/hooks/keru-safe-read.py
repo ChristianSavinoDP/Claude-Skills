@@ -100,6 +100,23 @@ JIRA_READONLY_PAIR = {
     ("board", "list"),
 }
 
+# pup (DataDog CLI): only the read command paths keru-datadog-audit uses. `pup`
+# tags every command with a `read_only` flag in its own --help; this is an
+# explicit allowlist (like GH_READONLY), so any path not listed (every write:
+# `cases create/jira`, `metrics submit`, `logs archives/metrics delete`,
+# `metrics metadata update`, and the interactive `auth login/logout/refresh`)
+# falls through to the model judge and prompts. Matched as an anchored prefix of
+# the positional tokens, so a flag VALUE that follows the verb can never make a
+# write path look like a read.
+PUP_READONLY = {
+    ("error-tracking", "issues", "search"), ("error-tracking", "issues", "get"),
+    ("logs", "search"), ("logs", "aggregate"), ("logs", "list"), ("logs", "query"),
+    ("events", "search"), ("events", "list"), ("events", "get"),
+    ("metrics", "query"), ("metrics", "search"), ("metrics", "list"),
+    ("auth", "status"), ("auth", "test"), ("auth", "list"),
+    ("version",),
+}
+
 # gh: only read subcommands. Writes (pr create/merge/comment, run rerun, etc.)
 # are deliberately excluded so they fall through to the ask rules.
 GH_READONLY = {
@@ -315,6 +332,27 @@ def tokens_are_safe(tokens) -> bool:
         sub1 = rest[0] if rest else ""
         sub2 = rest[1] if len(rest) > 1 else ""
         if sub1 not in JIRA_READONLY_SOLO and (sub1, sub2) not in JIRA_READONLY_PAIR:
+            return False
+    elif base == "pup":
+        # Skip pup's global flags first (they precede the domain), so a value-
+        # taking global (`--org X`, `--output X`) does not turn its value into a
+        # false leading positional and break the prefix match. Same idea as the
+        # git global-option skip above.
+        rest = tokens[1:]
+        i = 0
+        while i < len(rest) and rest[i].startswith("-"):
+            # --org/--output take a separate value token unless given as =VALUE.
+            if rest[i] in ("--org", "--output"):
+                i += 2
+            else:  # --agent/--no-agent/--yes/--org=.../--output=...: no separate value
+                i += 1
+        # Match the read command as an anchored prefix of the positional (non-
+        # flag) tokens after the globals: the first positional must be the read
+        # domain, so a write domain (`cases`, `metrics submit`) can never be
+        # promoted to a read, and a flag VALUE after the verb (a --query or
+        # --compute argument) cannot shift the prefix. Anything not listed defers.
+        pos = tuple(t for t in rest[i:] if not t.startswith("-"))
+        if not any(len(pos) >= len(p) and pos[:len(p)] == p for p in PUP_READONLY):
             return False
     elif base in KERU_READONLY_HELPERS:
         return True  # read-only project helpers; their args are issue keys/repos
