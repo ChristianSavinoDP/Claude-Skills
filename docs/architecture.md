@@ -46,7 +46,7 @@ One skill, `repo-health`, is deliberately NOT installed globally. It audits this
 
 ## Secrets
 
-The repo is public. No secret is committed. Tokens (Jira API token, GitHub auth) live outside the repo: in `~/.claude/settings.json` `env` or the tool's own keychain. `.claude/settings.local.json` is gitignored.
+The repo is public. No secret is committed. Tokens (Jira API token, GitHub auth, the `pup` DataDog OAuth session) live outside the repo: in `~/.claude/settings.json` `env`, the tool's own keychain, or its own config dir (`pup` keeps a short-lived, auto-refreshing session in `~/Library/Application Support/pup/`, no long-lived key). `.claude/settings.local.json` is gitignored.
 
 ## Idempotence
 
