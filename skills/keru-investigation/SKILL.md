@@ -26,6 +26,7 @@ Read the relevant code and docs directly; track each claim back to evidence you 
 - **State each conclusion plainly** with its evidence inline or cited, not hedged.
 - **Sources** in a section at the end.
 - **Pass markdownlint:** proper heading hierarchy, fenced code blocks with a language, no trailing spaces.
+- **In-repo links resolve from the repo root, with a leading slash** (`/internal/jobs/service.go#L53`), because the doc is rendered on GitHub, where a link with no leading slash resolves against the doc's own directory and 404s. A workspace-root-relative path (no slash) is a chat-rendering convention, not GitHub's; translate it. Before writing the first link, confirm the sibling docs' convention with a grep (`grep -rE '\]\(/?[a-z].*\.(go|rb|ya?ml)' docs/investigations`), do not infer it from a sample that happens to have no in-repo links.
 
 ## Output
 
@@ -49,5 +50,7 @@ You are blind to your own reasoning: a conclusion you reached feels settled even
 - an acceptance criterion answered only partially or not at all,
 - a claim about how the code/system behaves that was inferred, not verified against the source,
 - a recommendation that does not follow from the findings.
+
+Give it a second, separate pass on the artifact as it will render, not just its argument: open every in-repo link and confirm it resolves from *this doc's directory on GitHub* (leading-slash root-relative), check anchors and heading hierarchy, and confirm every fenced block declares a language. This pass exists because a content-only review inherits the author's blind spot; a link that names the right code but resolves to a path that does not exist passes every content lens and still 404s.
 
 Then validate each finding against the actual evidence before acting on it: re-read the code or doc and confirm the gap is real, do not accept or dismiss it from assumption (that dismiss-from-memory move is the exact failure this guards against). Fix the confirmed ones, re-verify, then deliver.
