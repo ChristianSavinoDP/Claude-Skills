@@ -361,6 +361,12 @@ def tokens_are_safe(tokens) -> bool:
         sub = tokens[1] if len(tokens) > 1 else ""
         if sub != "audit":
             return False
+    elif base == "keru-repo-update":
+        # Read-only only in `audit` mode; `update` switches branches and
+        # fast-forwards (mutates the working tree), so defer it.
+        sub = tokens[1] if len(tokens) > 1 else ""
+        if sub != "audit":
+            return False
     elif base not in READ_ONLY:
         return False
     inplace_risky = base in INPLACE_COMMANDS

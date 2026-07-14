@@ -50,6 +50,8 @@ Each skill is also its slash command (type the name, or just describe the task a
 | `keru-responding-to-ci` | get a PR's failing CI green | triages each red check, then calls debugging/writing-code; read-only on CI, never reruns or pushes |
 | `keru-branch-audit` | list stale local branches (gone upstream) across the projects root or one named repo | read-only; uses the `keru-branch-cleanup` helper |
 | `keru-branch-clean` | delete stale local branches across the projects root or one named repo | `disable-model-invocation` (typed-only); confirms against an audit list first, skips current + default |
+| `keru-repo-audit` | show what switching to default + fast-forwarding would do, per repo | read-only; uses the `keru-repo-update` helper |
+| `keru-repo-update` | switch each repo to its default branch and fast-forward to origin | `disable-model-invocation` (typed-only); confirms against an audit first, stashes tracked changes, `--ff-only`, skips diverged |
 
 ## Authoring a new skill
 
