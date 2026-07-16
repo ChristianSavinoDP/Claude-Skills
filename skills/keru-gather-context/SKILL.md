@@ -46,6 +46,7 @@ Do not begin the task until you can answer all of these. If any is "no", keep ga
 - If an investigation exists, have I read the investigation ticket AND its PR/document, not just its title?
 - Do I understand the rationale behind each acceptance criterion (including any "do NOT do X")?
 - If any value or behavior the task touches is set by deploy/infra (a pod grace period, preStop, resource limit, env var, flag), have I read the chart/terraform that sets it, instead of assuming or deferring it?
+- For every concrete fact I took from the ticket or epic (a cadence, threshold, owner, channel, name), have I confirmed it against the repo artifact that defines it, rather than trusting the ticket's wording, which can be aspirational or stale?
 
 Then tell the user what you read (linked tickets, the investigation and where its conclusions live, PRs, files) before proceeding.
 
@@ -70,6 +71,8 @@ Prefer the local copy if the repo is already checked out; only go remote when it
 ## Using the context
 
 Treat the ticket plus its chain as the source of truth per the Playbook: work type, acceptance criteria, scope, and the rationale behind them. Do not invent acceptance criteria. If anything is thin or ambiguous, surface it to the user rather than guessing. Briefly tell the user what you read (linked tickets, investigation, PRs, remote files) so the chain is visible.
+
+The ticket and epic are authoritative for *what the work is*, not for concrete facts the repo itself defines. A Jira ticket or epic states intent, and its wording can be aspirational or stale (an epic titled "The Bi-Weekly Review" for a process the repo's README documents as weekly). So for any concrete operational fact the task quotes (a cadence, threshold, owner, channel, name, metric, widget title), find the repo artifact that defines it (README, config, code, terraform, the same file the deliverable will link to) and take the value from there, do not lift it from the ticket or epic. This is the same rule as step 6 for deploy-coupled values, generalized: the source that *defines* a fact outranks a source that merely *mentions* it. If they differ, the repo wins and you name the conflict rather than resolving it silently (Playbook).
 
 ## Read-only boundary
 
