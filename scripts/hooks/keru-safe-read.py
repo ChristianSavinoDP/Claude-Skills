@@ -258,6 +258,23 @@ def tokens_are_safe(tokens) -> bool:
         sub = tokens[1] if len(tokens) > 1 else ""
         if sub not in TF_READONLY_SUB:
             return False
+    elif base == "dp":
+        # `dp terraform run terraform|tofu [global flags] <sub> ...` runs
+        # terraform through the dp plugin wrapper (keru-terraform-apply). It is
+        # read-only iff the terraform subcommand is: reuse TF_READONLY_SUB, so
+        # apply/destroy/import/state are NOT provably safe here and fall through
+        # to the model judge and the explicit ask rules. Any other `dp ...`
+        # invocation (ai, awsso, plugin, ...) defers to the model judge.
+        if tokens[1:4] not in (["terraform", "run", "terraform"],
+                               ["terraform", "run", "tofu"]):
+            return False
+        rest = tokens[4:]
+        i = 0
+        while i < len(rest) and rest[i].startswith("-"):
+            i += 1  # skip terraform global flags before the subcommand (-chdir=DIR)
+        sub = rest[i] if i < len(rest) else ""
+        if sub not in TF_READONLY_SUB:
+            return False
     elif base in ("command", "type", "hash"):
         # Only the lookup forms are safe (`command -v x`, `type x`). `command x`
         # would run x, bypassing this allowlist, so require a lookup flag for

@@ -19,7 +19,7 @@ Read the relevant code and docs directly; track each claim back to evidence you 
 
 ## Writing rules
 
-- **Self-contained:** readable without the ticket.
+- **Self-contained:** readable without the ticket. The body cites code and repo artifacts only. A person's name or a quoted ticket/PR comment never appears: those are input that told you *what* to investigate, not evidence for the deliverable, which states conclusions on code you checked. When a comment raised an open question, restate the question on its own terms (no name, no quote) and answer it from the code; who raised it is irrelevant to a reader of the doc.
 - **Answer every acceptance-criteria bullet,** presented organically, not as a checklist.
 - **Open with the finding,** organized by the question being answered, with real headings a reader can scan (one heading per criterion or finding). No generic intro.
 - **Avoid the "term - definition" pattern;** use proper sentences or sections.
@@ -48,7 +48,8 @@ You are blind to your own reasoning: a conclusion you reached feels settled even
 
 - a conclusion stated without the evidence to back it, or backed by an assumption rather than something checked,
 - an acceptance criterion answered only partially or not at all,
-- a claim about how the code/system behaves that was inferred, not verified against the source,
+- a claim about how the code/system behaves that was inferred, not verified against the source. For each such claim, open the source that would *disprove* it, not the one that inspired it: a plausible framing ("every transfer has an equivalent advance") is exactly the kind that reads as settled while the model's own scope or an adjacent surface contradicts it,
+- a person's name or a quoted ticket/PR comment in the body: the doc must be self-contained, so an open question must stand on its own terms with no attribution,
 - a recommendation that does not follow from the findings.
 
 Give it a second, separate pass on the artifact as it will render, not just its argument: open every in-repo link and confirm it resolves from *this doc's directory on GitHub* (leading-slash root-relative), check anchors and heading hierarchy, and confirm every fenced block declares a language. This pass exists because a content-only review inherits the author's blind spot; a link that names the right code but resolves to a path that does not exist passes every content lens and still 404s.
