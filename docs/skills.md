@@ -52,6 +52,7 @@ Each skill is also its slash command (type the name, or just describe the task a
 | `keru-branch-clean` | delete stale local branches across the projects root or one named repo | `disable-model-invocation` (typed-only); confirms against an audit list first, skips current + default |
 | `keru-repo-audit` | show what switching to default + fast-forwarding would do, per repo | read-only; uses the `keru-repo-update` helper |
 | `keru-repo-update` | switch each repo to its default branch and fast-forward to origin | `disable-model-invocation` (typed-only); confirms against an audit first, stashes tracked changes, `--ff-only`, skips diverged |
+| `keru-terraform-apply` | run a terraform change from local through the `dp` CLI | `disable-model-invocation` (typed-only); asks the env first, previews with an unlocked `-target` plan, confirms before apply, never applies to prod |
 
 ## Authoring a new skill
 

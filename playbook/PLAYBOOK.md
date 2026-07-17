@@ -58,6 +58,16 @@ A malformed deliverable cannot be written, so it cannot reach the user. The deli
 - **DRY.** Reuse what exists; do not duplicate. Flag duplication in review as you would avoid it when writing.
 - **Stay within scope,** but clean related cruft in the same change rather than leaving a follow-up; reserve follow-ups for something large and unrelated.
 
+## Parallelize the work
+
+When a task splits into independent pieces, do not do them serially. There are three shapes; pick by what the pieces are, and a skill's own steps say which applies where.
+
+- **Fan out to subagents** when the work is *judgment* that gains from an independent, unbiased pass (reviewing a diff along several dimensions, verifying findings, several analysis lenses). Launch them in a single message so they run concurrently, each owning one dimension with no stake in the others. It costs tokens but catches blind spots one pass rationalizes away. A subagent's finding is a claim to verify against the source yourself, never a fact to repeat; you own the synthesis, the agents only return raw findings.
+- **Issue reads/calls concurrently** (no subagent) when the pieces are *independent I/O* (per-repo, per-service, per-file reads) and one coherent synthesis follows. Issue them together and collect the results rather than walking them one at a time.
+- **Stay serial** when there is a dependency spine (each step needs the previous one's output, e.g. discover-then-read) or the work mutates shared state. Writes to one working tree are serial even when the diagnosis that preceded them fanned out: apply changes one at a time, they would collide otherwise. Destructive and irreversible steps are always serial and confirmed.
+
+Never let concurrency skip a dependency (you cannot read a set before the step that names it) or a safety gate.
+
 ## Tools and shell
 
 - **Jira/GitHub: always the CLI, never WebFetch.** `jira` and `gh` are installed and authenticated. A URL is just an id: extract it, run the CLI. No MCP server, no WebFetch. CLI missing: stop and say so.

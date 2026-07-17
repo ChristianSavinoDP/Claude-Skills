@@ -17,7 +17,7 @@ This skill itself does neither the root-cause validation nor the fix; it decides
 ## Procedure
 
 1. **Get the failing checks.** `gh pr checks <pr>` to list the red ones. Reading CI (checks, runs, logs) is allowed and prompts nothing.
-2. **Pull the failure detail.** For each failing check, read the failing logs: `gh run view <run-id> --log-failed`.
+2. **Pull the failure detail.** For each failing check, read the failing logs: `gh run view <run-id> --log-failed`. The checks are independent, so read their logs concurrently; if the count is high or a cause is not obvious, fan the triage out to a subagent per failing check (each reads its own logs and returns a classification with the one-line reason). This is the Playbook's split ("Parallelize the work"): diagnosis parallelizes, but the fixing in step 3 stays serial because it mutates the shared working tree, so apply changes one at a time and `keru-debugging`/`keru-writing-code` run one after another.
 3. **Triage each failure into one of:**
    - **flaky / infra** (timeout, runner died, network blip, transient registry error): mark it as such and STOP on that check. Do not touch code. Re-running is a user decision (`gh run rerun` prompts), so surface it, do not run it.
    - **cause obvious** (lint, format, an explicit type error, a missing import): the cause is known, so skip debugging and go straight to `keru-writing-code` for the fix.

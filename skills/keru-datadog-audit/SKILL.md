@@ -37,7 +37,7 @@ The services to audit are a personal choice, like bot-triage's repo list. There 
 
 ## Procedure
 
-Work through the audit **one service at a time**, over a time window that defaults to the **last 24h** unless the user specifies a date/range (state the window you used). The services are independent, so run the per-service gather in parallel (issue the `pup` reads for all services together and collect the results) rather than serially; then analyze and attribute each. This keeps a many-service audit fast without changing what is gathered.
+Work through the audit over a time window that defaults to the **last 24h** unless the user specifies a date/range (state the window you used). The services are independent, so run the per-service gather concurrently (issue the `pup` reads for all services together and collect the results, Playbook "Parallelize the work", the I/O-concurrency shape); then analyze and attribute each yourself. This keeps a many-service audit fast without changing what is gathered.
 
 **The error filter (the base query):** `env:production -status:(info OR warn OR notice OR debug OR ok) service:<svc>`. Exclude the non-error levels rather than matching `status:error`, so any error severity is caught, not only the literal `error` label. The ONLY part that changes per service is `service:<svc>`; keep the rest verbatim. Pass it to `pup` as `--query "<that>"` (the parenthesized `-status:(...)` passes through the shell fine inside the quoted string). Add `env:<other>` only if the user audits a non-production env.
 

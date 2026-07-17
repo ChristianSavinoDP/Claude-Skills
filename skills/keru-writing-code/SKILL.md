@@ -29,17 +29,14 @@ Run the Playbook's verify gate: re-read the full diff as a strict reviewer (Copi
 
 ### Adversarial review before delivering (non-trivial changes)
 
-For any change with real logic, infra, or CI (not a rename/config one-liner), do not rely on your own re-read alone: you are blind to your own decisions. Launch a fresh subagent reviewer over the diff, with no stake in how you wrote it. Tell it to hunt specifically for what authors miss and Copilot catches:
+For any change with real logic, infra, or CI (not a rename/config one-liner), do not rely on your own re-read alone: you are blind to your own decisions. Fan out fresh subagent reviewers over the diff (Playbook "Parallelize the work", the fan-out shape), with no stake in how you wrote it, to hunt for what authors miss and Copilot catches. Dispatch them in a single message, each owning one dimension and returning `file:line` plus why:
 
-- dead or now-unused code left beside an edit (e.g. a permission/scope still granted after its use was removed),
-- mutable or inconsistent external references (a `@main` ref where the repo pins versions),
-- checks that do not actually cover their case (e.g. `git diff --exit-code` missing untracked files),
-- flaky tests: assertions that depend on timing, real `sleep`/wall-clock, or goroutine scheduling rather than a deterministic signal (the kind that pass locally and fail in CI),
-- human-facing text that overstates behavior: an alert, log, or error message (or a code comment) asserting a cause or downstream effect the code does not actually observe (a symptom-based check, e.g. running-vs-desired tasks or healthy-host count, described as detecting the root cause),
-- references that do not resolve: a path, URL, or runbook link the change emits that does not exist on the base branch, with the cross-PR merge-order dependency not flagged,
-- behavior silently dropped, and runtime-only bugs.
+- **Correctness / runtime bugs:** dead or now-unused code left beside an edit (e.g. a permission/scope still granted after its use was removed), checks that do not actually cover their case (e.g. `git diff --exit-code` missing untracked files), behavior silently dropped, nil/edge cases, config parsed at runtime, and other bugs that compile but fail at runtime.
+- **Test quality:** flaky tests, assertions that depend on timing, real `sleep`/wall-clock, or goroutine scheduling rather than a deterministic signal (the kind that pass locally and fail in CI).
+- **References and external refs:** mutable or inconsistent external references (a `@main` ref where the repo pins versions); references that do not resolve, a path, URL, or runbook link the change emits that does not exist on the base branch, with the cross-PR merge-order dependency not flagged.
+- **Human-facing text:** an alert, log, or error message (or a code comment) that overstates behavior, asserting a cause or downstream effect the code does not actually observe (a symptom-based check, e.g. running-vs-desired tasks or healthy-host count, described as detecting the root cause).
 
-Then, critically: **validate each finding against the real code before acting on it.** Open the file and confirm the issue is actually present, do not accept or dismiss a finding from assumption (that is the exact failure this guards against). Apply the confirmed ones and re-review. Aim to catch what a reviewer like Copilot would, before delivering, not after.
+Then, critically: **validate each finding against the real code before acting on it.** When the agents return, collect their findings, open the file, and confirm each issue is actually present, do not accept or dismiss a finding from assumption (that is the exact failure this guards against). Apply the confirmed ones and re-review. Aim to catch what a reviewer like Copilot would, before delivering, not after.
 
 **A confirmed finding is a blocker to resolve, not a note to ship with.** Flagging a risk in a code comment or PR note is not resolving it: "keep this below X" written next to a value that is not below X is still a bug. If the review confirms a value is wrong (e.g. a timeout exceeds the pod's grace window), verify the real constraint at its source and set a safe value before delivering; do not ship the suspect value with a TODO-style comment, and do not reclassify it as an "infra prerequisite out of scope" when the constraining value is readable via `gh` or a local clone (that is `gather-context`'s deploy/infra step, do it). The value leaves your hands correct, or it does not leave.
 

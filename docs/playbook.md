@@ -1,6 +1,6 @@
 # The Playbook
 
-[`playbook/PLAYBOOK.md`](../playbook/PLAYBOOK.md) holds the always-on rules: language, the first step (get the ticket and its context), verify-don't-assume, shared standards, tool/shell rules, and safety. It is deliberately short. Task-specific procedure (how to review a PR, write code, run an investigation, draft a ticket) lives in the matching skill and loads when that work starts, so the always-on file stays small enough to actually follow.
+[`playbook/PLAYBOOK.md`](../playbook/PLAYBOOK.md) holds the always-on rules: language, the first step (get the ticket and its context), verify-don't-assume, shared standards, how to parallelize the work, tool/shell rules, and safety. It is deliberately short. Task-specific procedure (how to review a PR, write code, run an investigation, draft a ticket) lives in the matching skill and loads when that work starts, so the always-on file stays small enough to actually follow.
 
 ## Always loaded
 

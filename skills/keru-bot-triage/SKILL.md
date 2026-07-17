@@ -19,7 +19,7 @@ The repos to triage are a personal choice. There is NO default list in the repo:
 
 ## Procedure
 
-For each repo, run `keru-bot-triage <owner/repo>` and read its JSON (`pull_requests[]` with `number`, `title`, `url`, `section`, `is_security`, `checks.state`, `draft`; `alerts` with `total`, `by_severity`, `items[]` (each with `url`); `security_url`).
+For each repo, run `keru-bot-triage <owner/repo>` and read its JSON (`pull_requests[]` with `number`, `title`, `url`, `section`, `is_security`, `checks.state`, `draft`; `alerts` with `total`, `by_severity`, `items[]` (each with `url`); `security_url`). The repos are independent, so issue the per-repo helper runs concurrently and collect the results (Playbook "Parallelize the work", the I/O-concurrency shape); you still classify and correlate every result yourself below.
 
 - **Classify, do not just list.** Each bot PR already carries a `section` (dependabot / frogbot / sdk-gen / release / mise / renovate / other-bot) and an `is_security` flag.
 - **Correlate alerts to PRs.** For each security alert, check whether an open PR resolves it (same package/manifest). What matters is the alerts with NO fixing PR; those are the ones to surface. Note the `gh` API alert count can differ from the Security tab UI count; the API is the source of truth.

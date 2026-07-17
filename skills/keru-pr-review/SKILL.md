@@ -7,13 +7,35 @@ description: Review a pull request. Use whenever the user asks to review or look
 
 Procedure for reviewing a PR. The Playbook's always-on rules apply (verify, never fabricate, concise, no slop); this skill adds the review rules. Applies to both code and investigation PRs.
 
-## Before reviewing
+The review runs in three ordered phases: first pin the correct repo and branch, then fan out the agents over that fixed state, then gather all their findings into the one deliverable. Do not overlap them: the checkout must be settled before any agent runs (they all read the same PR head), and every agent must return before you synthesize.
+
+## Phase 1: pin the repo and branch
+
+Get the review pointed at the exact PR head before anything else runs.
 
 1. Get the ticket and its context first (Playbook "first step"). Use the `keru-gather-context` skill to gather read-only context: the PR (branch, body, files) and its linked Jira ticket and chain. The ticket type (feature vs follow-up vs investigation) and acceptance criteria change how you review.
-2. Identify the PR; ask for the number/URL if not given.
+2. Identify the PR; ask for the number/URL if not given. Confirm the owner/repo, so the checks and checkout below act on the right repo, not whatever happens to be the current directory.
 3. Fetch the diff and metadata: `gh pr view <pr>` and `gh pr diff <pr>` (follow gather-context's PR-diff guidance: read the pushed head, measure a large diff before dumping it, read from a local clone only if its branch sits at the PR head). For an investigation PR, also check `docs/investigations/` for the expected format. Read changed files in full when behavior depends on surrounding code.
+4. **Settle the branch (only if the review will run tests locally).** Check out the PR branch ONCE, so every agent in Phase 2 sees the same head. This switches the user's current branch, so it is a confirmed step, never silent: confirm the working tree is clean first (`git status`; a review carries no uncommitted local changes), then `gh pr checkout <pr>` (this is unlisted, so it prompts, and that prompt IS the confirmation). Tell the user you switched branches and that they can switch back after. If the branch already sits at the PR head, skip the checkout and say so. Do not launch any agent until this is settled.
 
-## Checklist
+## Phase 2: fan out to subagents
+
+A single linear pass misses things and is slow. For any PR with real behavior (not a rename, a config one-liner, or a docs-only diff, which you review inline), do NOT review it all yourself in sequence: with the repo and branch now pinned from Phase 1, fan out independent subagents (Playbook "Parallelize the work", the fan-out shape), each over the same PR, each owning one dimension. Launch them in a single message so they run concurrently.
+
+Dispatch these agents (drop one only when it does not apply: no CI configured, no ticket, no local checkout):
+
+1. **CI status (read-only).** `gh pr checks <pr>`, group the red checks, and for each pull the failing logs (`gh run view <run-id> --log-failed`). Classify each failure as a real failure (blocks merge) or flaky/infra. This agent does NOT fix anything and does NOT rerun: getting red CI green is `keru-responding-to-ci`, a separate skill the user triggers. Here it only reports what is red and whether it blocks the merge.
+2. **Local verification.** In the checked-out tree, run the repo's own tests / lint / build for the changed languages (the allowlisted `go test` / `npm test` / `pytest` / `gradle` / `dotnet` and friends) and report pass/fail with the failing output verbatim. Never commit or push. If the branch was not checked out, say so and skip this agent rather than guessing.
+3. **Correctness / bug hunt.** Read the diff and the surrounding code and hunt for what compiles but fails at runtime, the same failure modes `keru-writing-code` guards: dropped behavior, broken contracts, unconfirmed regressions, nil/edge cases, config parsed at runtime, mutable/inconsistent external refs, checks that do not actually cover their case, tests flaky by timing. Return each candidate as `file:line` plus why.
+4. **Acceptance criteria + coverage.** Against the ticket and its chain (from gather-context), decide whether the PR satisfies each acceptance criterion, and whether new public API surface is covered by tests. Return a per-AC verdict and any coverage gap.
+
+Each agent RETURNS its findings to you; none of them writes the deliverable or posts to GitHub. You own the single gated review file and the synthesis.
+
+## Phase 3: gather findings into the deliverable
+
+Once every agent has returned, you (not any agent) collect all their findings, verify each against the source (next section), classify the survivors, and write the single gated review file (see "Output"). The verdict follows from the verified findings. This synthesis is yours alone: the agents produced raw data, the deliverable is one coherent review.
+
+## Checklist (the rubric the agents apply)
 
 1. Satisfies the acceptance criteria?
 2. Compilation / test failures? Check CI yourself (`gh pr checks <pr>`); the PR description is the author's claim, not evidence.
@@ -22,9 +44,13 @@ Procedure for reviewing a PR. The Playbook's always-on rules apply (verify, neve
 5. (Investigations) Conclusions supported by evidence? Diagrams accurate?
 6. Behavioral regression? Dropping behavior something depends on is blocking unless the ticket asked for it and it is verified safe to drop.
 
+### Verify every finding before it enters the review
+
+A subagent's finding is a claim to verify, not a fact to repeat (Playbook "verify, never assume"). Before any finding lands in the review, open the real code and confirm it is actually present, exactly as `keru-writing-code` requires of its own adversarial pass: do not accept a bug from an agent's assertion, and do not drop one from an agent's dismissal, without checking the source yourself. A plausible-but-wrong blocking comment on someone else's PR is worse than silence. Only verified findings reach the deliverable; classify each (Blocking / Nit / Question) and let the verdict follow from them.
+
 ## Comment categories and scope
 
-- **Blocking:** bugs, security, broken contracts, unconfirmed regressions. Request changes.
+- **Blocking:** bugs, security, broken contracts, unconfirmed regressions, a real (non-flaky) red check. Request changes.
 - **Nit:** style, minor improvements. Label explicitly.
 - **Question:** genuine clarification needed.
 - Follow-up ticket: resolve everything here, do not defer. Feature ticket: refactors are valid if something is not done well. Skip only what is genuinely unrelated.
@@ -44,6 +70,7 @@ You are reviewing another person's work, often already approved by others, so th
 - Do not suggest error handling for impossible scenarios.
 - Do not nitpick formatting if there is a linter.
 - Do not request scope expansion on investigation PRs.
+- Do not fix CI or push a fix from here: report red checks; the fix is `keru-responding-to-ci`, triggered separately.
 - If everything is good, just approve.
 
 ## Decision flow
@@ -51,7 +78,7 @@ You are reviewing another person's work, often already approved by others, so th
 ```text
 Within the ticket scope?
 +-- No -> Do not comment
-+-- Yes -> Bug/security/broken contract/regression?
++-- Yes -> Bug/security/broken contract/regression/real red check?
     +-- Yes -> Blocking comment
     +-- No -> Clear improvement, no downsides?
         +-- Yes -> Suggest it
@@ -80,6 +107,8 @@ Why: AC #3 asks to confirm no path relies on retrying app-level errors; this one
 ````
 
 The location+code line and the "Why" are for the user to navigate; only the fenced block after "Comment" is copied to GitHub. That fenced block follows the "Tone" rules above (peer suggesting, not authority declaring). If everything is good, just the verdict line.
+
+The agents' work (CI status, what ran locally and passed/failed, which findings you verified against the source) is internal working: it goes in a `Why:` line on the relevant finding, or not at all, never as a chat recap or a summary table around the link.
 
 ## Posting (only if asked)
 
