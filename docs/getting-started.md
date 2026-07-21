@@ -10,13 +10,14 @@ From the repo root:
 scripts/install.sh
 ```
 
-The installer is idempotent (safe to re-run) and never overwrites a real, non-symlink file. It does five things:
+The installer is idempotent (safe to re-run) and never overwrites a real, non-symlink file. It does six things:
 
 1. Symlinks each `skills/keru-<name>/` into `~/.claude/skills` (each one doubles as its `/keru-<name>` slash command).
 2. Prunes symlinks whose source was deleted from the repo.
-3. Merges `config/` (permissions and hooks) into the global `~/.claude/settings.json`, plus the playbook `SessionStart` hook generated with this machine's repo path, preserving what is already there (a `.bak` is written first).
+3. Merges `config/` (permissions and hooks) into the global `~/.claude/settings.json`, plus two `SessionStart` hooks generated with this machine's repo path (the playbook `cat` and the drift check, see [permissions.md](permissions.md)), preserving what is already there (a `.bak` is written first).
 4. Installs the `keru-*` helper scripts into `~/.local/bin` and adds it to PATH if missing.
-5. Checks the external tools (`gh`, `jira`, `pup`): installs missing ones via Homebrew, validates auth, and prints the exact setup command for anything that needs interactive configuration.
+5. Records the current install state in `~/.claude/.keru-installed-rev`, so the drift check can later tell that the repo changed and a re-run is needed.
+6. Checks the external tools (`gh`, `jira`, `pup`): installs missing ones via Homebrew, validates auth, and prints the exact setup command for anything that needs interactive configuration.
 
 Restart Claude Code sessions afterward. Skills (and their slash commands), permissions, and hooks are loaded at session start, so changes apply to new sessions, not the current one.
 

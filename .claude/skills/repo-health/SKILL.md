@@ -11,7 +11,7 @@ This skill is local to this repo (it lives in `.claude/`, not symlinked into `~/
 
 The script and skill split the work: the deterministic checks run from `repo-health/repo-health.sh`, the semantic checks are the skill's own judgment. Never restate a script check in prose, and never script a judgment call.
 
-Invoked with arguments, `$ARGUMENTS` scopes the run: pass `docs`, `permissions`, or `installer` to run one check instead of all, and `--fix` to apply mechanical fixes instead of only reporting. Default (no arguments): all checks, report-only.
+Invoked with arguments, `$ARGUMENTS` scopes the run: pass `docs`, `permissions`, `installer`, or `hooks` to run one check instead of all, and `--fix` to apply mechanical fixes instead of only reporting. Default (no arguments): all checks, report-only.
 
 ## Procedure
 
@@ -19,6 +19,7 @@ Invoked with arguments, `$ARGUMENTS` scopes the run: pass `docs`, `permissions`,
    - **docs**: every skill/command on disk is documented in `docs/`, and no doc entry is an orphan;
    - **permissions**: no rule sits in both `allow` and `ask`, no exact duplicates;
    - **installer**: `install.sh` is idempotent and `uninstall.sh` reverses it, run in a sandbox `HOME` (touches nothing real).
+   - **hooks**: the Bash/Stop hooks still reason correctly, exercised on real inputs via `repo-health/test-hooks.py` (targets the source scripts in `scripts/hooks/`, not the installed copies).
 2. Run the semantic checks the script cannot (read the files, judge):
    - **Rule drift (playbook vs skills):** read `playbook/PLAYBOOK.md` and every `skills/*/SKILL.md`. Flag any rule stated in more than one place (the same rule paraphrased, not just shared words). This enforces principle #1; it is the audit's core and is not scriptable.
    - **Doc accuracy:** for each doc under `docs/`, confirm its prose still matches reality (a described hook that no longer exists, a skill whose behavior changed, a stale count). The script checks existence; you check truth.

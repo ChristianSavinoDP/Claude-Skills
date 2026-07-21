@@ -42,7 +42,7 @@ Each skill is also its slash command (type the name, or just describe the task a
 | `keru-addressing-pr-comments` | resolve review comments | validates each comment before applying |
 | `keru-investigation` | produce a doc, ADR, runbook, or RCA | markdown deliverable, sources at the end |
 | `keru-pr-description` | write a PR description | follows the repo's PR template |
-| `keru-writing-tickets` | draft a ticket | output in chat only, never a file |
+| `keru-writing-tickets` | draft a ticket | gated deliverable; drafts only, never creates it in Jira |
 | `keru-gather-context` | gather context from a ticket, PR, repo, or URL | read-only; resolves the chain both ways, can read uncloned repos |
 | `keru-bot-triage` | triage dependency/security bot PRs and Dependabot alerts across repos | read-only; uses the `keru-bot-triage` helper, never merges |
 | `keru-datadog-audit` | audit DataDog errors for a set of services | read-only via `pup`; gated deliverable, groups by recurrence and attributes (ours vs external, reading repos locally), then offers to route to `keru-debugging` (cause in doubt) or `keru-writing-tickets` (recurring + ours) on the user's yes |

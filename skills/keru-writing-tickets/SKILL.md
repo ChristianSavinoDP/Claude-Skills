@@ -1,6 +1,6 @@
 ---
 name: keru-writing-tickets
-description: Draft a ticket (feature, bug, investigation, follow-up, task breakdown). Use whenever the user asks to write, draft, or create a ticket/issue/story, with or without a slash command. Output goes in chat, never to a file.
+description: Draft a ticket (feature, bug, investigation, follow-up, task breakdown). Use whenever the user asks to write, draft, or create a ticket/issue/story, with or without a slash command. Drafts the ticket only; never creates it in Jira.
 ---
 
 # Writing Tickets
@@ -10,7 +10,7 @@ Procedure for drafting tickets. The Playbook's rules apply (concise, no slop, ne
 ## Before drafting
 
 - **Know the type (gate):** feature, bug, investigation, follow-up, or task breakdown. If the user did not say, ask and wait, do not guess. Ruling a type out is not picking one. The type shapes the content.
-- **Draft in chat only,** never a file. Do not create it in Jira or offer to: the output is the draft in chat, the user takes it from there.
+- **Draft only, never create it in Jira** or offer to: you produce the ticket text (to the gated file, see Output), the user takes it from there.
 
 ## A ticket is what + why, not how
 
