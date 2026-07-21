@@ -133,6 +133,10 @@ unmerge_config
 remove_helpers
 remove_path_line
 
+# Drop the drift-check marker the installer recorded (the SessionStart hook and
+# the helper itself are already removed by unmerge_config / remove_helpers).
+rm -f "$CLAUDE_DIR/.keru-installed-rev" && echo "removed: $CLAUDE_DIR/.keru-installed-rev"
+
 echo "Done. Restart Claude Code sessions to apply."
 echo ""
 echo "Left in place on purpose (remove by hand if you want):"

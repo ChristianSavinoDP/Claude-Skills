@@ -84,6 +84,8 @@
       "Bash(keru-jira-dev *)",
       "Bash(keru-bot-triage *)",
       "Bash(keru-branch-cleanup audit *)",
+      "Bash(keru-repo-update audit *)",
+      "Bash(keru-repo-update update *)",
       "Bash(jira epic list *)",
       "Bash(jira me)",
       "Bash(gh pr list *)",

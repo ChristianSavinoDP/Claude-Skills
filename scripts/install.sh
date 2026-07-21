@@ -60,7 +60,7 @@ merge_config() {
   mkdir -p "$CLAUDE_DIR"
   [ -f "$settings" ] && cp "$settings" "$settings.bak"
   python3 - "$settings" "$perms" "$hooks" "$REPO_DIR" <<'PY'
-import json, sys, os
+import json, sys, os, shlex
 settings_path, perms_path, hooks_path, repo_dir = sys.argv[1:5]
 
 def load(path):
@@ -83,6 +83,19 @@ hooks_frag = load(hooks_path).get("hooks", {})
 playbook = os.path.join(repo_dir, "playbook", "PLAYBOOK.md")
 hooks_frag.setdefault("SessionStart", []).append({
     "hooks": [{"type": "command", "command": "cat " + playbook + " 2>/dev/null"}]
+})
+
+# Inject the drift check as a second SessionStart hook, with this machine's repo
+# path resolved at runtime (same reason as the playbook: the path is
+# machine-specific and cannot live in the committed config). It reads local git
+# refs only (no fetch) and the on-disk repo, so it adds no startup latency; it
+# prints a notice only when the local clone is behind origin or the repo changed
+# since the last install. Referenced by its ~/.local/bin name so is_ours() below
+# recognizes it as ours (synced in here, removed on uninstall) like every other
+# keru-* hook.
+drift = "~/.local/bin/keru-check-drift " + shlex.quote(repo_dir)
+hooks_frag.setdefault("SessionStart", []).append({
+    "hooks": [{"type": "command", "command": drift, "timeout": 10}]
 })
 
 # Allow editing the global ~/.claude tree (skills/config live there as
@@ -198,7 +211,8 @@ install_helpers() {
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-check-output.py" "$BIN_DIR/keru-check-output"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-judge-output.py" "$BIN_DIR/keru-judge-output"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-gate-deliverable.py" "$BIN_DIR/keru-gate-deliverable"
-  echo "installed: keru-jira-dev, keru-bot-triage, keru-branch-cleanup, keru-repo-update, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill, keru-check-output, keru-judge-output, keru-gate-deliverable in $BIN_DIR"
+  install -m 0755 "$REPO_DIR/scripts/hooks/keru-check-drift.py" "$BIN_DIR/keru-check-drift"
+  echo "installed: keru-jira-dev, keru-bot-triage, keru-branch-cleanup, keru-repo-update, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill, keru-check-output, keru-judge-output, keru-gate-deliverable, keru-check-drift in $BIN_DIR"
   ensure_on_path
 }
 
@@ -290,6 +304,16 @@ check_tools() {
   fi
 }
 
+# Record the current activatable state (skill set, config, helper/hook scripts)
+# so the SessionStart drift check can tell, on later sessions, that the repo
+# changed since this install and a re-run is needed. Uses the just-installed
+# helper so the hash logic has a single home. Best-effort; never aborts install.
+write_drift_marker() {
+  "$BIN_DIR/keru-check-drift" --write-marker "$REPO_DIR" \
+    && echo "recorded: install state for drift check" \
+    || echo "note: could not record drift-check marker (non-fatal)"
+}
+
 link_dir skills
 prune_dangling skills
 # Skills are their own slash commands; a typed-only command is a skill with
@@ -299,6 +323,7 @@ prune_dangling skills
 prune_dangling commands
 merge_config
 install_helpers
+write_drift_marker
 check_tools
 
 echo "Done. Restart Claude Code sessions to pick up changes."
