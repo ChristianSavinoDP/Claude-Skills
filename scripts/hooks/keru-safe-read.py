@@ -214,8 +214,18 @@ def tokens_are_safe(tokens) -> bool:
         while i < len(rest) and rest[i].startswith("-"):
             if rest[i] in ("--no-pager", "--paginate", "--literal-pathspecs"):
                 i += 1
+            elif rest[i] == "-C":
+                # `-C <path>` only changes WHICH repo the command runs in, not
+                # whether it reads or writes; the GIT_READONLY_SUB gate below
+                # still applies, so `git -C <dir> push` still defers. It takes a
+                # separate path value (git rejects the attached `-C<path>` form),
+                # so skip the flag and its value. This is the form pr-review uses
+                # to read a PR head from a local clone without a checkout.
+                i += 2
             else:
-                return False  # -C, -c, --git-dir, etc: not provably safe
+                # -c (injects config, e.g. core.pager=<cmd> runs arbitrary code
+                # even on a read subcommand), --git-dir, --work-tree, etc: defer.
+                return False
         after = rest[i:]
         sub = after[0] if after else ""
         if sub not in GIT_READONLY_SUB:
@@ -531,8 +541,13 @@ def judge_with_model(command):
         return "ask"
     prompt = JUDGE_SYSTEM + "\n\nCommand:\n" + command
     try:
-        proc = subprocess.run([dp, "ai", "claude", "-p", "--bare", prompt],
-                              capture_output=True, text=True, timeout=25)
+        # --no-session-persistence: the judge is a throwaway one-shot classifier,
+        # so its session must NOT be saved to disk (otherwise every deferred
+        # command leaves a resumable session that clutters the `dp ai claude`
+        # history). Requires --print, which -p already sets.
+        proc = subprocess.run(
+            [dp, "ai", "claude", "-p", "--bare", "--no-session-persistence", prompt],
+            capture_output=True, text=True, timeout=25)
     except Exception:
         return "ask"
     out = (proc.stdout or "").strip().upper()

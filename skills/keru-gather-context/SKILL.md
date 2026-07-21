@@ -66,9 +66,12 @@ Per the Playbook's "Never fabricate" rule, when context lives in another repo, d
 - A file's contents: `gh api repos/<owner>/<repo>/contents/<path> --jq '.content' | base64 -d` (or `gh api .../contents/<path>?ref=<branch>`).
 - List a directory: `gh api repos/<owner>/<repo>/contents/<dir>`.
 - Search code across a repo or org: `gh search code "<query>" --repo <owner>/<repo>` (or `--owner <org>`).
-- A PR's changed files and diff: `gh pr diff <n> --repo <owner>/<repo>` (the pushed PR head, which is what a review must read). If the diff could be large, do not dump it whole into context: measure it first with a pipe (`gh pr diff <n> --repo <owner>/<repo> | wc -l`), then if it is big read the changed files (`--json files`) one at a time rather than the whole diff. Measure with a pipe, not a redirect to a file: `> /tmp/<file>` makes the command prompt for permission, a plain pipe does not. A review is normally of someone else's PR, so the branch is usually not checked out; if it IS checked out (ask if unsure), reading the changed files from the clone is fine and skips the fetch, but only because a review should carry no uncommitted local changes, so confirm the local branch sits at the PR head (up to date with the remote) first.
-
-Prefer the local copy if the repo is already checked out; only go remote when it is not.
+- A PR's changed files and diff: read the pushed PR head, which is what a review must read. **Prefer the local clone whenever the repo is cloned; it is faster than paging the whole PR over the API, and most of the user's repos are cloned under the projects root (memory `projects-root`, one level deep).** Going remote per file when a clone exists is the slow default this skill is correcting. Get the head into the clone read-only, without a checkout and without touching the user's current branch:
+  1. `git -C <clone> fetch origin pull/<n>/head` (allowlisted, no prompt, mutates nothing but the local `FETCH_HEAD`; it does NOT switch branches).
+  2. List changed files: `git -C <clone> diff --name-only origin/<base>...FETCH_HEAD` (base is the PR's `baseRefName`), or the full diff `git -C <clone> diff origin/<base>...FETCH_HEAD`.
+  3. Read a changed file in full at the PR head: `git -C <clone> show FETCH_HEAD:<path>`.
+  This reads the exact pushed head with no working-tree change, so it is safe even mid-review and needs no clean tree (nothing is checked out). If the branch already IS checked out at the PR head, reading the files straight from the working tree is fine too.
+- Only go remote (`gh`) when the repo is genuinely not cloned: `gh pr diff <n> --repo <owner>/<repo>`. If the diff could be large, do not dump it whole into context: measure it first with a pipe (`gh pr diff <n> --repo <owner>/<repo> | wc -l`), then if it is big read the changed files (`gh pr view <n> --json files`) one at a time rather than the whole diff. Measure with a pipe, not a redirect to a file: `> /tmp/<file>` makes the command prompt for permission, a plain pipe does not.
 
 ## Using the context
 
