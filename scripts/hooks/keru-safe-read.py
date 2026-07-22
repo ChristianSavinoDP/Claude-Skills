@@ -47,11 +47,17 @@ HEADER_KW = {"for", "select"}    # `for VAR in WORDS`: WORDS are operands, not r
 COND_KW = {"while", "until", "if", "elif"}  # followed by a condition command
 DEFER_KW = {"case", "esac", "function"}      # too messy to parse: defer
 
-# git subcommands that only read. Excludes `config`/`remote` (mutate config),
-# `fetch` (network + writes .git). `checkout`/`switch` are here but the
-# discard forms (`checkout -- <file>`, `checkout .`) are rejected below.
+# git subcommands that only read or are local-reversible. Excludes
+# `config`/`remote` (mutate config). `fetch` is here: it is a network read that
+# only writes remote-tracking refs and FETCH_HEAD under local `.git` (reversible
+# via reflog, never touches the working tree or remote state), the same
+# local-reversible category as the rest — so `git -C <clone> fetch origin
+# pull/<n>/head` (used by pr-review / gather-context) is approved deterministically
+# instead of falling to the non-deterministic model judge. `checkout`/`switch` are
+# here but the discard forms (`checkout -- <file>`, `checkout .`) are rejected below.
 GIT_READONLY_SUB = {"log", "diff", "status", "show", "branch", "blame",
-                    "rev-parse", "ls-files", "describe", "checkout", "switch"}
+                    "rev-parse", "ls-files", "describe", "checkout", "switch",
+                    "fetch"}
 
 # go subcommands that are read-only or local-reversible (fmt reformats files,
 # build/test/vet are safe). `go env -w/-u` is rejected below. `go tool` is here
