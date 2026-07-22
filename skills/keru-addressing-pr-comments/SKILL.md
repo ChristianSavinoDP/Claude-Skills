@@ -10,7 +10,7 @@ Procedure for working through review comments. The Playbook's always-on rules ap
 ## Steps
 
 1. Get the ticket first (Playbook "first step"); scope is defined by the ticket type. Use the `keru-gather-context` skill to gather the PR and its linked ticket and chain (read-only) before deciding on any comment.
-2. Pull the comments (`gh pr view <pr> --comments`) and the diff for context (`gh pr diff <pr>`).
+2. Pull the comments (`gh pr view <pr> --comments`) and the diff for context via gather-context's PR-diff guidance: from the local working tree if the branch is already checked out at the PR head, else the local clone, else `gh pr diff <pr>` (Playbook "read local state before re-fetching remote").
 3. Validate the comments, then apply. Validating each comment against the codebase (is it correct? in scope? does the suggested shape match the file's order?) is independent per comment, so for a batch of more than a couple, fan that validation out to a subagent per comment (or per group of related comments), each returning apply-or-push-back with the evidence. Then do the writing yourself, one comment at a time. This is the Playbook's split ("Parallelize the work"): validation parallelizes, the edits stay serial because they mutate the shared working tree, and grouped related comments are resolved together.
 
 ## Rules

@@ -72,6 +72,7 @@ Never let concurrency skip a dependency (you cannot read a set before the step t
 
 - **Jira/GitHub: always the CLI, never WebFetch.** `jira` and `gh` are installed and authenticated. A URL is just an id: extract it, run the CLI. No MCP server, no WebFetch. CLI missing: stop and say so.
 - **Right tool, not raw shell.** Author files with Write/Edit (not `cat >`/`tee`/`>`); read with Read; parse with `yq` (YAML) / `jq` (JSON) / `actionlint` (workflows), never `python3 -c`/`node -e`/`ruby -e`. `mv`/`cp` to relocate files is fine.
+- **Read local state before re-fetching remote.** If the branch or PR you are working on is already checked out locally at the target head, read the diff from the working tree; do not re-fetch the PR head or re-checkout. Confirm local `HEAD` matches the pushed head first (`gh pr view <pr> --json headRefOid` vs `git rev-parse HEAD`); go remote (fetch `pull/<pr>/head`, `gh pr diff`) only when they differ or the branch is not cloned.
 
 ## Safety: local runs, remote and irreversible ask
 
