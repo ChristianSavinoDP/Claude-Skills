@@ -19,7 +19,18 @@ The installer is idempotent (safe to re-run) and never overwrites a real, non-sy
 5. Records the current install state in `~/.claude/.keru-installed-rev`, so the drift check can later tell that the repo changed and a re-run is needed.
 6. Checks the external tools (`gh`, `jira`, `pup`): installs missing ones via Homebrew, validates auth, and prints the exact setup command for anything that needs interactive configuration.
 
-Restart Claude Code sessions afterward. Skills (and their slash commands), permissions, and hooks are loaded at session start, so changes apply to new sessions, not the current one.
+Restart Claude Code afterward so a new session loads them: start a new session in the terminal, or reload the window (Command Palette, "Developer: Reload Window") if you use the VS Code extension. Skills (and their slash commands), permissions, and hooks are loaded at session start, so changes apply to new sessions, not the current one.
+
+## Update
+
+Pulling the latest is not enough on its own: symlinked skills and the playbook are live, but a new or removed skill, a `config/*.json` change, or a helper/hook script edit only take effect on `scripts/install.sh` (those are copied or merged, not symlinked). So a `git pull` alone leaves them stale. Always pair the two:
+
+```bash
+git pull
+scripts/install.sh
+```
+
+Then restart as under [Install](#install) above (a new terminal session, or reload the VS Code window). The `SessionStart` drift check is the safety net for this: it reminds you at session start when the local clone is behind origin or the repo changed since your last install (see [permissions.md](permissions.md)).
 
 ## Tool setup
 

@@ -17,8 +17,8 @@ Procedure for drafting tickets. The Playbook's rules apply (concise, no slop, ne
 The implementer decides how. Length is a defect: a reader should grasp the whole ticket in one scan.
 
 - **Title:** one line, the outcome. Not sub-tasks joined by "and".
-- **Context:** 2 to 4 sentences (problem + why). Link the source ticket/investigation, do not restate it.
-- **Each criterion is one checkable line,** an observable outcome. No file/function names, `if`/flag values, or per-bullet rationale; state an essential constraint as an outcome ("X no longer runs when Y is unchanged"), not as code.
+- **Context:** 2 to 4 sentences stating the problem and the goal, not a point-by-point diff against a reference. Naming a reference to mirror is fine ("mirror the `X` setup"); keep the contrast between the two in the criteria, where it is checkable. Link the source ticket/investigation, do not restate it.
+- **Each criterion is one checkable line,** an observable outcome. No file/function names, `if`/flag values, or per-bullet rationale; state an essential constraint as an outcome ("X no longer runs when Y is unchanged"), not as code. Do not cite the ticket you are drafting as a source ("per the note in `DBI-1575`" inside `DBI-1575`): state the constraint directly ("(out of scope)").
 - **Wrap identifiers in inline `code`:** repo names, package names, versions, and literal values (`null`, `high`, `0.7.19`) go in backticks, in the context and the criteria alike. Jira renders it, and it makes the ticket scannable instead of a flat wall of prose. Ground the context in concrete numbers from the source (counts, versions) rather than vague quantities.
 - **Past ~6 to 7 criteria it is probably several tickets:** split, do not grow one.
 - Add value with sharper criteria, not more words: flag a missing criterion or an unstated assumption.

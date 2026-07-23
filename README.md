@@ -10,6 +10,10 @@ scripts/install.sh
 
 That wires the repo into Claude Code (skills, which double as `/keru-*` commands, permissions, the playbook) and checks the `gh`, `jira`, and `pup` (DataDog) tools. Restart Claude Code afterward. Full steps and tool login in [docs/getting-started.md](docs/getting-started.md).
 
+After a `git pull`, re-run `scripts/install.sh` and restart: a pull alone leaves copied/merged pieces (new skills, config, hooks, helpers) stale. See [Update](docs/getting-started.md#update).
+
+> The `keru-` prefix on every skill, command, and helper is "Keru", my longtime alias. It just namespaces this repo's artifacts so they never collide with anything else in `~/.claude`.
+
 ## Using it day to day
 
 You rarely think about the pieces; you just describe the task. The right flow fires on its own, or you invoke it with a slash command.

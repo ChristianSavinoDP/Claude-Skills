@@ -12,6 +12,7 @@ Tests target the scripts in scripts/ (the source of truth), not the installed
 """
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,7 @@ REQUIRE_SKILL = os.path.join(HOOKS, "keru-require-skill.py")
 CHECK_OUTPUT = os.path.join(HOOKS, "keru-check-output.py")
 JUDGE_OUTPUT = os.path.join(HOOKS, "keru-judge-output.py")
 GATE = os.path.join(HOOKS, "keru-gate-deliverable.py")
+CHECK_DRIFT = os.path.join(HOOKS, "keru-check-drift.py")
 
 results = []
 
@@ -564,12 +566,192 @@ def test_write_gate():
         shutil.rmtree(d, ignore_errors=True)
 
 
+# --- keru-check-drift --------------------------------------------------------
+# The SessionStart install-drift check. Two independent signals, both exercised
+# offline and deterministically: (B) the activation-hash logic is pure and needs
+# no git, so its drift/no-drift cases run against a plain temp layout; (A) the
+# "behind origin" logic runs against a LOCAL bare remote (no network), forcing
+# the throttled fetch by aging FETCH_HEAD. The fetch's own failure mode is
+# fail-open by design, so it is not itself asserted here.
+
+def _drift(argv, claude_dir):
+    """Run keru-check-drift with CLAUDE_CONFIG_DIR (and HOME) pinned to a sandbox,
+    so the marker it reads/writes never touches the real ~/.claude."""
+    env = dict(os.environ)
+    env["CLAUDE_CONFIG_DIR"] = claude_dir
+    env["HOME"] = claude_dir
+    return subprocess.run([sys.executable, CHECK_DRIFT, *argv],
+                          capture_output=True, text=True, env=env)
+
+
+def _write_layout(root, skill_names):
+    """A minimal stand-in for this repo's activatable layout: the skill dirs, the
+    two config/*.json, install.sh, and one helper + one hook script."""
+    for n in skill_names:
+        d = os.path.join(root, "skills", n)
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "SKILL.md"), "w") as f:
+            f.write("---\nname: %s\n---\n# %s\nbody\n" % (n, n))
+    os.makedirs(os.path.join(root, "config"), exist_ok=True)
+    with open(os.path.join(root, "config", "permissions.json"), "w") as f:
+        json.dump({"permissions": {}}, f)
+    with open(os.path.join(root, "config", "hooks.json"), "w") as f:
+        json.dump({"hooks": {}}, f)
+    os.makedirs(os.path.join(root, "scripts", "helpers"), exist_ok=True)
+    os.makedirs(os.path.join(root, "scripts", "hooks"), exist_ok=True)
+    with open(os.path.join(root, "scripts", "install.sh"), "w") as f:
+        f.write("#!/usr/bin/env bash\necho install\n")
+    with open(os.path.join(root, "scripts", "helpers", "keru-x.sh"), "w") as f:
+        f.write("#!/usr/bin/env bash\necho x\n")
+    with open(os.path.join(root, "scripts", "hooks", "keru-y.py"), "w") as f:
+        f.write("print('y')\n")
+
+
+def _run_git(args, cwd=None):
+    """git with author env set and user/system config ignored, so commits succeed
+    regardless of the host's git config."""
+    env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+               GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t",
+               GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_SYSTEM="/dev/null")
+    cmd = ["git"] + (["-C", cwd] if cwd else []) + args
+    return subprocess.run(cmd, capture_output=True, text=True, env=env)
+
+
+def _commit(repo, fname, content):
+    with open(os.path.join(repo, fname), "w") as f:
+        f.write(content + "\n")
+    _run_git(["add", "-A"], cwd=repo)
+    _run_git(["commit", "-q", "-m", content], cwd=repo)
+
+
+def _init_repo_pair(base):
+    """A local bare 'remote' with one commit on main, and a clone of it. No
+    network: the clone's origin is a filesystem path."""
+    os.makedirs(base)
+    remote = os.path.join(base, "remote.git")
+    work = os.path.join(base, "work")
+    clone = os.path.join(base, "clone")
+    # Both the bare remote and the work tree must default to main; otherwise the
+    # remote inherits the host's default (e.g. master), origin/HEAD in the clone
+    # dangles, and the clone lands on the wrong branch.
+    _run_git(["-c", "init.defaultBranch=main", "init", "-q", "--bare", remote])
+    _run_git(["-c", "init.defaultBranch=main", "init", "-q", work])
+    _run_git(["symbolic-ref", "HEAD", "refs/heads/main"], cwd=work)
+    _commit(work, "a.txt", "a")
+    _run_git(["remote", "add", "origin", remote], cwd=work)
+    _run_git(["push", "-q", "-u", "origin", "main"], cwd=work)
+    _run_git(["clone", "-q", remote, clone])
+    return work, clone
+
+
+def _age_fetch_head(repo):
+    """Make the last fetch look old so the hook's throttle actually fetches this
+    run (FETCH_INTERVAL is hours). Resolves the real git dir for robustness."""
+    gd = (_run_git(["rev-parse", "--git-dir"], cwd=repo).stdout or "").strip()
+    if gd and not os.path.isabs(gd):
+        gd = os.path.join(repo, gd)
+    try:
+        fh = os.path.join(gd, "FETCH_HEAD")
+        open(fh, "a").close()
+        os.utime(fh, (0, 0))
+    except OSError:
+        pass
+
+
+def test_check_drift():
+    base = tempfile.mkdtemp()
+    try:
+        # --- signal B: activation-hash drift (offline, deterministic) ---------
+        repo = os.path.join(base, "repo")
+        os.makedirs(repo)
+        _write_layout(repo, ["keru-a", "keru-b"])
+        cfg = os.path.join(base, "cfg")
+        os.makedirs(cfg)
+
+        # No marker yet: signal B stays silent (nothing to compare against).
+        check("drift: no marker -> silent",
+              _drift([repo], cfg).stdout.strip() == "")
+
+        # --write-marker records the state, returns 0, and writes a hashed marker.
+        wm = _drift(["--write-marker", repo], cfg)
+        marker = os.path.join(cfg, ".keru-installed-rev")
+        check("drift: --write-marker returns 0", wm.returncode == 0)
+        check("drift: marker file created with a hash",
+              os.path.exists(marker) and "hash" in json.load(open(marker)))
+
+        # Marker == current state -> silent (the round-trip the shared hash logic
+        # guarantees: what the installer wrote is what the check reads).
+        check("drift: unchanged after install -> silent",
+              _drift([repo], cfg).stdout.strip() == "")
+
+        # A SKILL.md body is live via the symlink, so its contents are excluded
+        # from the hash: editing one must NOT trigger a reinstall notice.
+        with open(os.path.join(repo, "skills", "keru-a", "SKILL.md"), "w") as f:
+            f.write("---\nname: keru-a\n---\n# a totally different body\n")
+        check("drift: editing a SKILL.md body -> silent (contents excluded)",
+              _drift([repo], cfg).stdout.strip() == "")
+
+        # Adding a skill changes the activatable SET -> notice.
+        os.makedirs(os.path.join(repo, "skills", "keru-c"))
+        check("drift: adding a skill -> reinstall notice",
+              "changed since the last install" in _drift([repo], cfg).stdout)
+
+        # Editing config/*.json (merged, not symlinked) -> notice.
+        _drift(["--write-marker", repo], cfg)
+        with open(os.path.join(repo, "config", "permissions.json"), "w") as f:
+            json.dump({"permissions": {"allow": ["X"]}}, f)
+        check("drift: editing config/*.json -> reinstall notice",
+              "changed since the last install" in _drift([repo], cfg).stdout)
+
+        # Editing a scripts/hooks script (copied onto PATH, not symlinked) -> notice.
+        _drift(["--write-marker", repo], cfg)
+        with open(os.path.join(repo, "scripts", "hooks", "keru-y.py"), "w") as f:
+            f.write("print('changed')\n")
+        check("drift: editing a scripts/hooks script -> reinstall notice",
+              "changed since the last install" in _drift([repo], cfg).stdout)
+
+        # --- arg handling / fail-open -----------------------------------------
+        no_arg = _drift([], cfg)
+        check("drift: no repo arg -> silent, exit 0",
+              no_arg.returncode == 0 and no_arg.stdout.strip() == "")
+        check("drift: --write-marker with no repo -> exit 2",
+              _drift(["--write-marker"], cfg).returncode == 2)
+        missing = _drift([os.path.join(base, "does-not-exist")], cfg)
+        check("drift: nonexistent repo -> fail-open (exit 0, silent)",
+              missing.returncode == 0 and missing.stdout.strip() == "")
+
+        # --- signal A: behind origin (offline, via a local bare remote) -------
+        if shutil.which("git"):
+            work, clone = _init_repo_pair(os.path.join(base, "git"))
+            gcfg = os.path.join(base, "gcfg")
+            os.makedirs(gcfg)
+            # On the default branch, HEAD == origin (fetch throttle skips): silent.
+            check("drift: on default, up to date -> silent",
+                  "behind origin" not in _drift([clone], gcfg).stdout)
+            # Advance the remote; aging FETCH_HEAD forces the hook to fetch, and
+            # it should then report the clone is behind.
+            _commit(work, "b.txt", "b")
+            _run_git(["push", "-q", "origin", "main"], cwd=work)
+            _age_fetch_head(clone)
+            check("drift: default branch behind origin -> 'behind origin' notice",
+                  "behind origin" in _drift([clone], gcfg).stdout)
+            # On a feature branch, 'behind' is never reported (no nag, no fetch):
+            # the guard returns before the fetch even though main is behind.
+            _run_git(["checkout", "-q", "-b", "feature"], cwd=clone)
+            _age_fetch_head(clone)
+            check("drift: feature branch never flagged behind -> silent",
+                  "behind origin" not in _drift([clone], gcfg).stdout)
+    finally:
+        shutil.rmtree(base, ignore_errors=True)
+
+
 def main():
     test_safe_read()
     test_require_skill()
     test_check_output()
     test_judge_gating()
     test_write_gate()
+    test_check_drift()
     failed = [n for n, ok in results if not ok]
     print("=== hook tests: %d run, %d failed ===" % (len(results), len(failed)))
     for n, ok in results:

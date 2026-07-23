@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(repo-health/repo-health.sh)",
+      "Bash(repo-health/repo-health.sh *)",
+      "Bash(bash repo-health/repo-health.sh)",
+      "Bash(bash repo-health/repo-health.sh *)",
+      "Bash(python3 repo-health/test-hooks.py)",
+      "Bash(python3 repo-health/test-hooks.py *)",
+      "Bash(chmod +x scripts/install.sh)",
+      "Bash(bash scripts/install.sh)"
+    ]
+  }
+}

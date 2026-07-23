@@ -27,3 +27,7 @@ The script owns the mechanical checks; the skill owns the semantic ones. Neither
 ## When to run it
 
 On demand, not as a per-action gate: after editing the playbook or a skill, and before committing repo changes. By default it reports; pass `--fix` to apply mechanical fixes.
+
+## Permissions
+
+Running these checks is a local, read-only action, but `repo-health.sh` and `test-hooks.py` run as scripts (`bash`/`python3 <file>`), which the Bash command gate cannot prove safe by static parsing, so without a rule they fall to the non-deterministic model judgment and may prompt. Because they are this repo's own maintenance scripts, `.claude/settings.json` (versioned, repo-local, like the skill itself) allow-lists exactly those two invocations, so the audit runs without a prompt in any clone. It is deliberately scoped to these paths, not a blanket `python3` allow: running arbitrary scripts stays gated everywhere else.
