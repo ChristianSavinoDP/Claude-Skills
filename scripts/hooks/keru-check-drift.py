@@ -19,9 +19,13 @@ tracked):
 So this hook prints, at session start, a short notice for two independent signals
 and stays silent when there is nothing to say:
 
-  A. HEAD is behind the remote default branch. Local refs only, NO fetch, so it
-     is "as of your last fetch" and adds zero startup latency. Only checked when
-     you are actually on the default branch, so feature-branch work is not nagged.
+  A. HEAD is behind the remote default branch. To make this reflect the remote in
+     THIS session (not whenever you last fetched by hand), the check does a
+     throttled, blocking `git fetch --prune` first: at most once every
+     FETCH_INTERVAL, bounded by a short timeout well under the hook's own, and
+     fail-open (a slow or failed fetch just leaves the refs as they were, i.e. the
+     old local-only behaviour). Only done when you are actually on the default
+     branch, so feature-branch sessions pay no network cost and are not nagged.
   B. The set of activatable artifacts (skill dir names, config/*.json, the
      scripts/ helpers and hooks, install.sh) differs from what was present at the
      last install, recorded in ~/.claude/.keru-installed-rev by --write-marker.
@@ -40,6 +44,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 # Resolve the config dir the same way install.sh does
 # (CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"), so the marker written at
@@ -49,15 +54,54 @@ CLAUDE_DIR = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claud
 MARKER = os.path.join(CLAUDE_DIR, ".keru-installed-rev")
 
 
-def _git(repo, *args):
+def _git(repo, *args, timeout=5):
     """Run a git command in repo; return stripped stdout, or None on any failure.
-    Never raises. Every caller below reads only local refs, so this never fetches."""
+    Never raises. All ref reads below are local; the one network call is the
+    throttled fetch in _maybe_fetch, which passes its own tighter timeout."""
     try:
         out = subprocess.run(["git", "-C", repo, *args],
-                             capture_output=True, text=True, timeout=5)
+                             capture_output=True, text=True, timeout=timeout)
     except Exception:
         return None
     return out.stdout.strip() if out.returncode == 0 else None
+
+
+# How stale the last fetch may be before the session-start check refreshes it,
+# and how long that fetch may block. FETCH_TIMEOUT sits below the hook's own 12s
+# timeout (install.sh) with room for the local git calls, so a hung remote can
+# never stall a session near that ceiling; on timeout the fetch is abandoned and
+# the check proceeds on the existing refs.
+FETCH_INTERVAL = 6 * 60 * 60  # seconds
+FETCH_TIMEOUT = 6  # seconds
+
+
+def _fetch_head_mtime(repo):
+    """Epoch mtime of .git/FETCH_HEAD (when the last fetch completed), or None if
+    it has never been fetched or the path is unreadable. Resolves the real git
+    dir first so this holds for worktrees and submodules, not just a plain .git."""
+    git_dir = _git(repo, "rev-parse", "--git-dir")
+    if not git_dir:
+        return None
+    if not os.path.isabs(git_dir):
+        git_dir = os.path.join(repo, git_dir)
+    try:
+        return os.stat(os.path.join(git_dir, "FETCH_HEAD")).st_mtime
+    except OSError:
+        return None
+
+
+def _maybe_fetch(repo, now):
+    """Throttled, blocking `git fetch --prune` so signal A reflects the remote in
+    THIS session. Skips the fetch when the last one was under FETCH_INTERVAL ago
+    (mtime of FETCH_HEAD), so most sessions pay nothing; the occasional one pays a
+    single fetch bounded by FETCH_TIMEOUT. Fail-open: any failure or timeout just
+    leaves the refs untouched, so the worst case is the old local-only behaviour.
+    `now` is passed in (Date.now-style values are supplied by the caller) so the
+    throttle stays deterministic and testable."""
+    last = _fetch_head_mtime(repo)
+    if last is not None and now is not None and (now - last) < FETCH_INTERVAL:
+        return
+    _git(repo, "fetch", "--prune", "--quiet", timeout=FETCH_TIMEOUT)
 
 
 def _default_branch(repo):
@@ -74,16 +118,18 @@ def _default_branch(repo):
     return None
 
 
-def _behind_count(repo):
+def _behind_count(repo, now=None):
     """How many commits the remote default branch is ahead of HEAD, or 0. Only
     reported when HEAD is ON the default branch, so deliberate feature-branch work
-    is never flagged as 'behind'."""
+    is never flagged as 'behind'. Refreshes the remote refs first via the
+    throttled fetch, so the count reflects the remote in this session."""
     branch = _default_branch(repo)
     if not branch:
         return 0
     current = _git(repo, "symbolic-ref", "--short", "--quiet", "HEAD")
     if current != branch:
         return 0  # on a feature branch (or detached HEAD): not our concern
+    _maybe_fetch(repo, now)  # only reached on the default branch: no network elsewhere
     count = _git(repo, "rev-list", "--count", "HEAD..refs/remotes/origin/" + branch)
     try:
         return int(count)
@@ -165,12 +211,15 @@ def _marker_hash():
 def _check(repo):
     notices = []
 
-    behind = _behind_count(repo)
+    try:
+        now = time.time()
+    except Exception:
+        now = None  # unavailable: _maybe_fetch then fetches (no throttle), still fail-open
+    behind = _behind_count(repo, now)
     if behind > 0:
         branch = _default_branch(repo) or "the default branch"
         notices.append(
-            "%d commit%s behind origin/%s (as of your last fetch). "
-            "Run: git -C %s pull --ff-only"
+            "%d commit%s behind origin/%s. Run: git -C %s pull --ff-only"
             % (behind, "" if behind == 1 else "s", branch, repo))
 
     # Signal B only when a marker exists (i.e. the repo has been installed with a

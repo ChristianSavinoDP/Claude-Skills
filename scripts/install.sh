@@ -87,15 +87,17 @@ hooks_frag.setdefault("SessionStart", []).append({
 
 # Inject the drift check as a second SessionStart hook, with this machine's repo
 # path resolved at runtime (same reason as the playbook: the path is
-# machine-specific and cannot live in the committed config). It reads local git
-# refs only (no fetch) and the on-disk repo, so it adds no startup latency; it
-# prints a notice only when the local clone is behind origin or the repo changed
-# since the last install. Referenced by its ~/.local/bin name so is_ours() below
-# recognizes it as ours (synced in here, removed on uninstall) like every other
-# keru-* hook.
+# machine-specific and cannot live in the committed config). It reads the on-disk
+# repo and local git refs, refreshing them first with a throttled, timeout-bounded
+# `git fetch` (at most once every few hours, only on the default branch) so the
+# "behind origin" notice reflects the remote in the same session; the 12s timeout
+# leaves headroom over that fetch. It prints a notice only when the local clone is
+# behind origin or the repo changed since the last install. Referenced by its
+# ~/.local/bin name so is_ours() below recognizes it as ours (synced in here,
+# removed on uninstall) like every other keru-* hook.
 drift = "~/.local/bin/keru-check-drift " + shlex.quote(repo_dir)
 hooks_frag.setdefault("SessionStart", []).append({
-    "hooks": [{"type": "command", "command": drift, "timeout": 10}]
+    "hooks": [{"type": "command", "command": drift, "timeout": 12}]
 })
 
 # Allow editing the global ~/.claude tree (skills/config live there as
