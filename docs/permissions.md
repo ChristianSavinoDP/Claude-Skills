@@ -27,7 +27,7 @@ Read-only and local, reversible commands, so they never prompt:
 - Git reads: `status`, `diff`, `log`, `branch`, `fetch`
 - Build/test/lint per language: Go (`build`, `test`, `vet`, `fmt`, `mod tidy`, ...), Node (`npm test/ci`, `eslint`, `prettier`, `tsc`, ...), Gradle, Python (`pytest`, `ruff`, ...), .NET
 - Terraform read-only: `plan`, `validate`, `version`, `init`, `fmt`
-- Jira / GitHub reads: `jira issue view/list`, `jira epic list`, `jira me`, `gh pr view/diff/list/checks`, `gh run view/list`, `gh workflow view/list`, `gh api repos/*`
+- Jira / GitHub reads: `jira issue view/list`, `jira epic list`, `jira me`, `gh pr view/diff/list/checks`, `gh search code`, `gh run view/list`, `gh workflow view/list`, `gh api repos/*` (GET only; a review POST to `.../pulls/*/reviews` is in ask, below)
 - DataDog reads (`pup`): `error-tracking issues search/get`, `logs search/aggregate/list/query`, `events search/list`, `metrics query/search/list`, `auth status`. Every `pup` write (`cases create/jira`, `metrics submit`, `logs archives/metrics delete`, `metrics metadata update`) is in ask, below
 - Read-only tool helpers: `keru-jira-dev`, `keru-bot-triage`, and `keru-branch-cleanup audit` (the audit mode only inspects; its `clean` mode is in ask, below)
 - `keru-repo-update` (both `audit` and `update`): audit is read-only; update is local-reversible (stashes are restorable, and a `--ff-only` pull only moves a pointer, never rewrites history or resolves a conflict, and skips diverged repos), so it fits the local-reversible line and never prompts. The skill itself gates it by showing the plan for confirmation first (`disable-model-invocation: true`)
@@ -41,9 +41,9 @@ Destructive actions (per the playbook's definition), so they prompt even under `
 - `git commit`, `git push`
 - Discarding uncommitted work: `git reset --hard`, `git checkout -- <files>`, `git restore`, `git clean`
 - `keru-branch-cleanup clean`: deletes local branches whose upstream is gone (not git-recoverable), so it prompts once before the batch; its `audit` mode is read-only and in allow
-- `terraform apply`, `terraform destroy`
-- Jira writes: `issue create/move/assign/comment/edit`, `epic add/create`, `sprint`
-- GitHub writes / CI triggers: `pr create/merge/review/comment/close/edit`, `run rerun/cancel`, `workflow run/enable/disable`
+- `terraform apply`, `terraform destroy` (and the same through `dp`: `dp terraform run terraform|tofu * apply|destroy`)
+- Jira writes: `issue create/move/assign/comment/edit/link`, `epic add/create`, `sprint`
+- GitHub writes / CI triggers: `pr create/merge/review/comment/close/edit`, `api repos/*/pulls/*/reviews` (posting a review: a more specific `ask` rule that wins over the read-only `gh api repos/*` allow), `run rerun/cancel`, `workflow run/enable/disable`
 - DataDog writes (`pup`): `cases create/jira`, `metrics submit`, `metrics metadata update`, `logs archives/metrics delete` (remote mutations, out of scope for the read-only audit)
 
 ## The Bash command gate (`keru-safe-read`): one hook, fast path + model fallback

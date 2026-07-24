@@ -21,7 +21,7 @@ Invoked with arguments, `$ARGUMENTS` scopes the run: pass `docs`, `permissions`,
    - **installer**: `install.sh` is idempotent and `uninstall.sh` reverses it, run in a sandbox `HOME` (touches nothing real).
    - **hooks**: the Bash/Stop hooks still reason correctly, exercised on real inputs via `repo-health/test-hooks.py` (targets the source scripts in `scripts/hooks/`, not the installed copies).
 2. Run the semantic checks the script cannot (read the files, judge):
-   - **Rule drift (playbook vs skills):** read `playbook/PLAYBOOK.md` and every `skills/*/SKILL.md`. Flag any rule stated in more than one place (the same rule paraphrased, not just shared words). This enforces principle #1; it is the audit's core and is not scriptable.
+   - **Rule drift (playbook vs skills):** read `playbook/PLAYBOOK.md`, every `skills/*/SKILL.md`, and every `commands/*.md`. Flag any rule stated in more than one place (the same rule paraphrased, not just shared words). This enforces principle #1; it is the audit's core and is not scriptable.
    - **Doc accuracy:** for each doc under `docs/`, confirm its prose still matches reality (a described hook that no longer exists, a skill whose behavior changed, a stale count). The script checks existence; you check truth.
 3. Report findings grouped by check, each with the file and the specific drift. Lead with what is wrong; say "no drift found" plainly when clean.
 

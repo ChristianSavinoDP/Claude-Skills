@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Set up this repo in Claude Code: symlink skills into ~/.claude (each skill is
-# its own /keru-* slash command, no wrapper layer), merge global permission
+# Set up this repo in Claude Code: symlink skills and commands into ~/.claude
+# (each skill is its own /keru-* slash command; commands/ holds the typed-only
+# state-changing ones as native command files), merge global permission
 # settings and hooks (including the playbook
 # SessionStart hook, generated with this machine's repo path), install the
 # keru-* helpers onto PATH, and check the external tools (gh, jira). The repo
@@ -19,6 +20,29 @@ link_dir() {
     [ -e "$entry" ] || continue
     local name target
     entry="${entry%/}"
+    name="$(basename "$entry")"
+    target="$dest/$name"
+    if [ -L "$target" ]; then
+      rm "$target"
+    elif [ -e "$target" ]; then
+      echo "skip: $target exists and is not a symlink (leaving as-is)"
+      continue
+    fi
+    ln -s "$entry" "$target"
+    echo "linked: $target -> $entry"
+  done
+}
+
+# Like link_dir, but for a dir of FLAT files (commands/*.md) rather than
+# subdirectories: each file is symlinked into ~/.claude/<dir>. Commands are
+# native Claude Code command files, one .md each, not skill folders.
+link_files() {
+  local src="$REPO_DIR/$1" dest="$CLAUDE_DIR/$1"
+  [ -d "$src" ] || return 0
+  mkdir -p "$dest"
+  for entry in "$src"/*.md; do
+    [ -e "$entry" ] || continue
+    local name target
     name="$(basename "$entry")"
     target="$dest/$name"
     if [ -L "$target" ]; then
@@ -316,12 +340,22 @@ write_drift_marker() {
     || echo "note: could not record drift-check marker (non-fatal)"
 }
 
+# Pre-clean: reverse any prior install first, so a re-install is a clean slate
+# and the removal logic lives in exactly ONE place (uninstall.sh), not duplicated
+# here. This matters when artifacts move (a skill becomes a command, a rule is
+# dropped from config): uninstall removes our rules structurally (by what config
+# declares, not only the _keruManaged marker), so a lost or stale marker cannot
+# leave an orphaned permission behind. Non-fatal: a cleanup failure must not abort
+# the install, and `--reinstall` suppresses uninstall's own restart epilogue.
+bash "$REPO_DIR/scripts/uninstall.sh" --reinstall || echo "note: pre-clean reported an issue (non-fatal); continuing install"
+
 link_dir skills
 prune_dangling skills
-# Skills are their own slash commands; a typed-only command is a skill with
-# disable-model-invocation in its frontmatter, not a separate commands/ file.
-# Still prune ~/.claude/commands so a prior install's wrapper symlinks (now
-# source-gone) are cleaned up.
+# commands/ holds typed-only, state-changing actions as native Claude Code
+# command files (one flat .md each), kept separate from skills/ so the "never
+# auto-fire" line is visible in the layout. Symlink them in, then prune any
+# whose source .md was removed.
+link_files commands
 prune_dangling commands
 merge_config
 install_helpers

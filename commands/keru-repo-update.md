@@ -1,5 +1,4 @@
 ---
-name: keru-repo-update
 description: Switch every repo to its default branch (main/master/develop) and fast-forward it to origin, across the projects root or for a single named repo. Always confirms against an audit list first; stashes uncommitted tracked changes (leaves them stashed), pulls --ff-only only, and skips diverged repos. The remote is never touched.
 disable-model-invocation: true
 ---
@@ -10,7 +9,7 @@ Bring every repo to its default branch, up to date with origin, in one batch. `d
 
 ## Procedure
 
-1. Resolve the target. If the user named a single repo (e.g. "only xapi"), the target is that repo's path under the projects root. Otherwise the target is the projects root from memory (`projects-root`); if none is saved, ask the user for it and offer to save it.
+1. Resolve the target the same way `/keru-repo-audit` does: a single named repo's path, otherwise the `projects-root` from memory (ask and offer to save it if none is set).
 2. Get the audit, do not blindly re-run it. Look back in this session for a `/keru-repo-audit` (or a `keru-repo-update audit`) result that covers the target:
    - If one exists and is for the same target, reuse it as the source of truth. Do not re-run the audit.
    - If none covers the target, run `keru-repo-update audit <target>` now (read-only) so there is a plan to confirm against.

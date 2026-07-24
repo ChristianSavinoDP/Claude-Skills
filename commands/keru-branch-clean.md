@@ -1,5 +1,4 @@
 ---
-name: keru-branch-clean
 description: Delete local branches whose upstream is gone (PR merged/closed, remote branch deleted), across the projects root or for a single named repo. Always confirms against an audit list first; skips the current and default branch. The remote is never touched.
 disable-model-invocation: true
 ---
@@ -10,7 +9,7 @@ Delete stale local branches in one batch. `disable-model-invocation: true` means
 
 ## Procedure
 
-1. Resolve the target. If the user named a single repo (e.g. "only xapi"), the target is that repo's path under the projects root. Otherwise the target is the projects root from memory (`projects-root`); if none is saved, ask the user for it and offer to save it.
+1. Resolve the target the same way `/keru-branch-audit` does: a single named repo's path, otherwise the `projects-root` from memory (ask and offer to save it if none is set).
 2. Get the audit, do not blindly re-run it. Look back in this session for a `/keru-branch-audit` (or a `keru-branch-cleanup audit`) result that covers the target:
    - If one exists and is for the same target, reuse its branch list as the source of truth. Do not re-run the audit.
    - If none covers the target, run `keru-branch-cleanup audit <target>` now (read-only) so there is a list to confirm against.

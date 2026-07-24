@@ -17,4 +17,4 @@ Show what `/keru-repo-update` would do across the projects root, without doing i
    - **Will be skipped**: `ff_status` is `diverged` (local commits origin lacks, so `--ff-only` can't apply) or `no-origin`. Name why.
    - Say "already up to date" for repos on their default with `ff_status` `up-to-date`.
 
-The pull `/keru-repo-update` runs is always `--ff-only`: it never creates a merge commit and never rewrites history, so a diverged repo is reported here and left untouched rather than force-merged. This audit is the chance to eyeball the list before running `/keru-repo-update`. Nothing is changed here.
+The pull `/keru-repo-update` runs is always `--ff-only` (that command owns the safety model), so a diverged repo is reported here and left untouched rather than force-merged. This audit is the chance to eyeball the list before running `/keru-repo-update`. Nothing is changed here.

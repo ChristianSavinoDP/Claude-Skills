@@ -67,7 +67,7 @@ pup auth login
 
 `pup auth login` opens a browser for an interactive OAuth flow, so it is a one-time step you run yourself (the installer cannot do it). Verify with `pup auth status` (returns `authenticated: true` and the token's scopes). Tokens are short-lived and auto-refresh; re-run `pup auth login` if `auth status` reports no token.
 
-Only `pup`'s read subcommands are used and allowlisted (`error-tracking issues search/get`, `logs search/aggregate/list/query`, `events search/list`, `metrics query/search/list`, `auth status`); every write (`cases create/jira`, `metrics submit`, `logs archives/metrics delete`) is in `ask` and out of scope for the read-only audit. See [permissions.md](permissions.md) for the exact boundary.
+Only `pup`'s read subcommands are used and allowlisted (`error-tracking issues search/get`, `logs search/aggregate/list/query`, `events search/list`, `metrics query/search/list`, `auth status`); every write (`cases create/jira`, `metrics submit`, `metrics metadata update`, `logs archives/metrics delete`) is in `ask` and out of scope for the read-only audit. See [permissions.md](permissions.md) for the exact boundary.
 
 ## Giving Claude task context
 

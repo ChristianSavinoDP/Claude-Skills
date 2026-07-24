@@ -12,7 +12,7 @@ scripts/install.sh
 
 The installer is idempotent (safe to re-run) and never overwrites a real, non-symlink file. It does six things:
 
-1. Symlinks each `skills/keru-<name>/` into `~/.claude/skills` (each one doubles as its `/keru-<name>` slash command).
+1. Symlinks each `skills/keru-<name>/` into `~/.claude/skills` and each `commands/keru-<name>.md` into `~/.claude/commands` (each one is its `/keru-<name>` slash command; commands are the typed-only, state-changing ones).
 2. Prunes symlinks whose source was deleted from the repo.
 3. Merges `config/` (permissions and hooks) into the global `~/.claude/settings.json`, plus two `SessionStart` hooks generated with this machine's repo path (the playbook `cat` and the drift check, see [permissions.md](permissions.md)), preserving what is already there (a `.bak` is written first).
 4. Installs the `keru-*` helper scripts into `~/.local/bin` and adds it to PATH if missing.

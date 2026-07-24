@@ -19,9 +19,9 @@ description: Review a pull request. Use whenever the user asks to review or look
 
 Every skill is also a slash command: type `/keru-<name>` to run it deliberately, with arguments (`/keru-writing-code DBI-1458`). Claude Code merged custom commands into skills, so a skill IS its command; there is no separate wrapper file. The slash name comes from the skill's directory name, which is why every skill here is named `keru-*`: it keeps them grouped and easy to spot in the `/` menu, distinct from built-in and plugin commands. Whatever you type after the name is available to the skill as `$ARGUMENTS`.
 
-**Typed-only skills.** A skill that must never auto-trigger sets `disable-model-invocation: true` in its frontmatter. It still appears as `/keru-<name>` and runs when you type it, but Claude never invokes it on its own from a matching request. This is for actions that should fire only on a deliberate command (e.g. `keru-branch-clean`, which deletes local branches): you do not want it firing because a request looked related. Use a normal skill when you want the flow to trigger on a matching request; add the flag when typing it must be the only way in.
+**Typed-only actions live under `commands/`.** An action that changes state and must never auto-trigger (whether it mutates remote infra or does something local but irreversible) does not live in `skills/`; it lives in `commands/` as a native command file, `commands/keru-<name>.md`. It still appears as `/keru-<name>` and runs when you type it, and carries `disable-model-invocation: true` in its frontmatter so Claude never invokes it on its own from a matching request. The separate directory is the point: it makes the "typed-only, state-changing, never auto-fired" line visible in the layout rather than hidden in a per-skill flag. See the [Commands](#commands) section below.
 
-The command is only a shortcut: the playbook ("Load the skill for the task") makes the skill mandatory whenever a request matches it, typed or not, so a skill is never skipped just because you described the task in plain words.
+The command is only a shortcut: the playbook ("Load the skill for the task") makes the skill mandatory whenever a request matches it, typed or not, so a skill is never skipped just because you described the task in plain words. Commands are the deliberate exception: they are typed on purpose, never triggered by a matching description.
 
 ## The explicit-request safeguard
 
@@ -49,16 +49,32 @@ Each skill is also its slash command (type the name, or just describe the task a
 | `keru-debugging` | find why a specific thing fails | validates the root cause with evidence; diagnoses only, does not write the fix; also called by other skills |
 | `keru-responding-to-ci` | get a PR's failing CI green | triages each red check, then calls debugging/writing-code; read-only on CI, never reruns or pushes |
 | `keru-branch-audit` | list stale local branches (gone upstream) across the projects root or one named repo | read-only; uses the `keru-branch-cleanup` helper |
-| `keru-branch-clean` | delete stale local branches across the projects root or one named repo | `disable-model-invocation` (typed-only); confirms against an audit list first, skips current + default |
 | `keru-repo-audit` | show what switching to default + fast-forwarding would do, per repo | read-only; uses the `keru-repo-update` helper |
-| `keru-repo-update` | switch each repo to its default branch and fast-forward to origin | `disable-model-invocation` (typed-only); confirms against an audit first, stashes tracked changes, `--ff-only`, skips diverged |
-| `keru-terraform-apply` | run a terraform change from local through the `dp` CLI | `disable-model-invocation` (typed-only); asks the env first, previews with an unlocked `-target` plan, confirms before apply, never applies to prod |
 
-## Authoring a new skill
+The read-only audit halves (`keru-branch-audit`, `keru-repo-audit`) are skills: they only inspect, so triggering on a matching request is fine. Their state-changing counterparts are commands (below).
+
+## Commands
+
+Commands live in `commands/` as native Claude Code command files (one flat `keru-<name>.md` each), symlinked by the installer into `~/.claude/commands/`. They are `/keru-<name>` like skills, but are **typed-only**: each carries `disable-model-invocation: true`, so Claude never fires one from a matching request. They are separated from skills because they all share one trait: they **change state and must not auto-fire**, whether the change is remote (infra) or local but irreversible (deleting branches, moving working trees off their current commit). Every command confirms against a concrete plan before it acts.
+
+| Command | Triggers when you type it, to | Notes |
+| --- | --- | --- |
+| `keru-branch-clean` | delete stale local branches across the projects root or one named repo | typed-only; confirms against an audit list first, skips current + default. Local but irreversible (deleted branches are not git-recoverable) |
+| `keru-repo-update` | switch each repo to its default branch and fast-forward to origin | typed-only; confirms against an audit first, stashes tracked changes, `--ff-only`, skips diverged. Local; recoverable but changes many working trees at once |
+| `keru-terraform-apply` | run a terraform change from local through the `dp` CLI | typed-only; asks the env first, previews with an unlocked `-target` plan, confirms before apply, never applies to prod. Mutates remote infra |
+| `keru-create-ticket` | create one or more tickets in Jira | typed-only; drafts each with `keru-writing-tickets`, asks board/type/service, adds `BAU` when there is no epic, confirms before each `jira issue create`. Writes to Jira |
+| `keru-pr-handle` | open a PR (or move an existing one forward) | typed-only; creates from `keru-pr-description` after guarding branch + clean tree, else routes to `addressing-pr-comments`/`responding-to-ci` or confirms a merge. Pushes, creates, merges |
+| `keru-review-publish` | run a PR review and post it to GitHub | typed-only; runs `keru-pr-review`, validates each inline comment anchors to a modified line, posts one review with the verdict's event. Publishes a review |
+
+## Authoring a new skill or command
+
+For a skill (a task flow that may trigger on a matching request):
 
 1. Create `skills/keru-<name>/SKILL.md` with `name` and `description` frontmatter (set `name` to match the directory, `keru-<name>`). The directory name is what you type after `/`, so the `keru-` prefix is what groups these in the menu.
 2. Write the procedure and the task-specific rules. Apply the playbook's always-on rules; do not restate them.
 3. Run `scripts/install.sh` to symlink it.
 4. Restart to pick it up.
+
+For a command (a typed-only, state-changing action): create `commands/keru-<name>.md` instead, a flat file with `description` and `disable-model-invocation: true` frontmatter (no `name` key: the command name comes from the filename). Same install/restart. Reach for a command, not a skill, whenever the action changes state and must not fire on its own.
 
 The `keru-` prefix also keeps names clear of built-in and plugin commands (`review`, `code-review`); a bare name like `review` would collide, and although your skill wins, it is confusing.

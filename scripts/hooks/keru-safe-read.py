@@ -81,6 +81,14 @@ TF_READONLY_SUB = {"fmt", "validate", "plan", "version", "show", "output",
 MISE_READONLY_SUB = {"registry", "ls", "list", "current", "which", "where",
                      "ls-remote", "version", "doctor", "env"}
 
+# golangci-lint subcommands that only read. `run` is deliberately excluded: it
+# rewrites files with `--fix`, so it stays on the explicit `golangci-lint run`
+# allow-list rule in permissions.json (a lint of the working tree the user
+# approved), not auto-approved here where `run --fix` would ride along. These are
+# the pure-read forms (`version`, `help`, `linters`, `config path/verify`, `cache
+# status`) that otherwise fall to the slow model judge for no reason.
+GOLANGCI_READONLY_SUB = {"version", "help", "linters", "config", "cache"}
+
 # pip subcommands that only inspect the environment. install/uninstall/download
 # (mutate the venv or fetch from the network) are NOT here and fall through to
 # the ask rules. `pip` may also be invoked as `pip3` or `python -m pip`.
@@ -307,6 +315,15 @@ def tokens_are_safe(tokens) -> bool:
                 return tokens_are_safe(inner)
             return False  # `mise exec` without `--` is ambiguous: defer
         if sub not in MISE_READONLY_SUB:
+            return False
+    elif base == "golangci-lint":
+        rest = [t for t in tokens[1:] if not t.startswith("-")]
+        sub = rest[0] if rest else ""
+        # Bare `golangci-lint` (no subcommand) prints help: read-only.
+        if rest and sub not in GOLANGCI_READONLY_SUB:
+            return False
+        # `cache clean` deletes the cache (mutation); only `cache status` reads.
+        if sub == "cache" and any(a != "status" for a in rest[1:]):
             return False
     elif base in ("pip", "pip3"):
         rest = [t for t in tokens[1:] if not t.startswith("-")]

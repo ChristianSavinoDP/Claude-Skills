@@ -8,7 +8,7 @@ A guide to working with Claude the way I want: a short playbook of always-on rul
 scripts/install.sh
 ```
 
-That wires the repo into Claude Code (skills, which double as `/keru-*` commands, permissions, the playbook) and checks the `gh`, `jira`, and `pup` (DataDog) tools. Restart Claude Code afterward. Full steps and tool login in [docs/getting-started.md](docs/getting-started.md).
+That wires the repo into Claude Code (skills and commands, both `/keru-*`, permissions, the playbook) and checks the `gh`, `jira`, and `pup` (DataDog) tools. Restart Claude Code afterward. Full steps and tool login in [docs/getting-started.md](docs/getting-started.md).
 
 After a `git pull`, re-run `scripts/install.sh` and restart: a pull alone leaves copied/merged pieces (new skills, config, hooks, helpers) stale. See [Update](docs/getting-started.md#update).
 
@@ -26,7 +26,7 @@ read DBI-1458
 /keru-pr-review https://github.com/dailypay/partner-integrations/pull/619
 ```
 
-**Common flows** (type the command, or just describe it and the skill triggers; the typed-only ones, `/keru-branch-clean`, `/keru-repo-update`, `/keru-terraform-apply`, never fire on their own):
+**Common flows** (type the command, or just describe it and the skill triggers; the typed-only *commands* that change state, grouped at the bottom of the table, never fire on their own, you type them):
 
 | You want to | Command | Give it |
 | --- | --- | --- |
@@ -46,12 +46,15 @@ read DBI-1458
 | Show what switching to default + fast-forwarding would do | `/keru-repo-audit` | nothing, or a repo/root |
 | Switch each repo to its default branch and fast-forward | `/keru-repo-update` | nothing, or a repo/root |
 | Run a terraform change from local (never prod) | `/keru-terraform-apply` | a repo laid out as `terraform/environments/<env>` |
+| Create one or more tickets in Jira | `/keru-create-ticket` | a description or prior context |
+| Open a PR, or move an existing one forward | `/keru-pr-handle` | nothing (works on the current branch) |
+| Run a PR review and post it | `/keru-review-publish` | a PR link |
 
-**What is safe.** Read commands and local file edits run without prompting. State-changing actions always ask first: `git commit`/`push`, `terraform apply`, PR merges, ticket writes, DataDog writes (`pup cases create`, `metrics submit`), deleting local branches (`/keru-branch-clean`), and discarding uncommitted work (`git reset --hard`, `checkout --`, `restore`, `clean`). Every other command goes through one Bash gate: read-only and local-reversible ones are approved instantly by a static check, and anything it cannot prove safe (a `make`/`mise` target, a `docker`/`kubectl`/`aws` call) gets a quick model judgment that prompts you if it mutates remote state or destroys something. Jira and GitHub always go through the `jira`/`gh` CLIs; a hook blocks WebFetch to those domains. Details in [docs/permissions.md](docs/permissions.md).
+**What is safe.** Read commands and local file edits run without prompting. State-changing actions always ask first: `git commit`/`push`, `terraform apply`, PR merges, ticket writes (`jira issue create`/`link`), posting a PR review (`gh api .../reviews`), DataDog writes (`pup cases create`, `metrics submit`), deleting local branches (`/keru-branch-clean`), and discarding uncommitted work (`git reset --hard`, `checkout --`, `restore`, `clean`). Every other command goes through one Bash gate: read-only and local-reversible ones are approved instantly by a static check, and anything it cannot prove safe (a `make`/`mise` target, a `docker`/`kubectl`/`aws` call) gets a quick model judgment that prompts you if it mutates remote state or destroys something. Jira and GitHub always go through the `jira`/`gh` CLIs; a hook blocks WebFetch to those domains. Details in [docs/permissions.md](docs/permissions.md).
 
 ## Changing how Claude works
 
-Edit an always-on rule in [`playbook/PLAYBOOK.md`](playbook/PLAYBOOK.md); edit a task's rules or steps in its skill under `skills/`; then re-run `scripts/install.sh`. There is nothing else to sync: every consumer reads from this repo. Why it is built this way is in [docs/architecture.md](docs/architecture.md).
+Edit an always-on rule in [`playbook/PLAYBOOK.md`](playbook/PLAYBOOK.md); edit a task's rules or steps in its skill under `skills/` (or, for a typed-only state-changing action, its command under `commands/`); then re-run `scripts/install.sh`. There is nothing else to sync: every consumer reads from this repo. Why it is built this way is in [docs/architecture.md](docs/architecture.md).
 
 ## Learn more
 

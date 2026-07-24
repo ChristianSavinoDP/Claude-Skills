@@ -171,6 +171,20 @@ def _activation_hash(repo):
         return None
     parts = ["skills=" + ",".join(names)]
 
+    # The SET of command filenames: commands/ holds native command files (flat
+    # .md), symlinked one-by-one, so adding/removing one needs a new symlink or
+    # prune, same as a skill dir. A command's body is live via its symlink, so
+    # its contents are excluded here too. A missing commands/ dir contributes a
+    # stable empty set rather than raising (the repo may not have one yet).
+    commands_dir = os.path.join(repo, "commands")
+    try:
+        cmd_names = sorted(f for f in os.listdir(commands_dir)
+                           if f.endswith(".md")
+                           and os.path.isfile(os.path.join(commands_dir, f)))
+    except OSError:
+        cmd_names = []
+    parts.append("commands=" + ",".join(cmd_names))
+
     # Files that are copied/merged by the installer, so an edit is inert until the
     # next run: config merged into settings.json, and the helper/hook scripts plus
     # the installer itself copied onto PATH.

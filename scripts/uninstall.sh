@@ -13,6 +13,12 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 BIN_DIR="$HOME/.local/bin"
 
+# --reinstall: install.sh runs this as a pre-clean before it re-installs, so the
+# closing "restart / left in place" notice would be misleading mid-install.
+# Suppress just that epilogue; every removal step still runs.
+REINSTALL_MODE=0
+[ "${1:-}" = "--reinstall" ] && REINSTALL_MODE=1
+
 # Remove symlinks under ~/.claude/<sub> that point into this repo.
 unlink_repo_symlinks() {
   local dest="$CLAUDE_DIR/$1"
@@ -32,9 +38,9 @@ unmerge_config() {
   [ -f "$settings" ] || return 0
   command -v python3 >/dev/null 2>&1 || { echo "skip: python3 not found, cannot unmerge config"; return 0; }
   cp "$settings" "$settings.bak"
-  python3 - "$settings" <<'PY'
-import json, sys
-settings_path = sys.argv[1]
+  python3 - "$settings" "$REPO_DIR" <<'PY'
+import json, os, sys
+settings_path, repo_dir = sys.argv[1], sys.argv[2]
 try:
     with open(settings_path) as f:
         settings = json.load(f)
@@ -44,18 +50,41 @@ except (ValueError, OSError) as e:
 
 settings.pop("todoFeatureEnabled", None)  # set by an older installer; clean it up
 
-managed = settings.pop("_keruManaged", None)
+marker = settings.pop("_keruManaged", None) or {}
 
-# Permission rules: remove the ones we recorded as managed (needs the marker;
-# rules are plain strings we cannot always tell apart from the user's own).
-if managed:
-    perms = settings.get("permissions", {})
-    for key in ("allow", "ask", "deny"):
-        if key in perms:
-            drop = set(managed.get(key, []))
-            perms[key] = [r for r in perms[key] if r not in drop]
-            if not perms[key]:
-                del perms[key]
+# Permission rules: remove everything the installer adds, marker or not. The
+# marker records what the last install added, but it can be missing or stale (a
+# settings.json edited by hand, or a half-finished install), which used to leave
+# our rules orphaned. So we do NOT rely on the marker alone: the managed set is
+# whatever the marker lists UNION what the repo's own config declares UNION the
+# runtime-generated home-.claude Edit rule install.sh appends. This mirrors how
+# hooks are already removed structurally, not from the marker. A rule the user
+# added themselves is in none of these, so it is preserved (that is why we do not
+# just clear the lists).
+def config_perms():
+    try:
+        with open(os.path.join(repo_dir, "config", "permissions.json")) as f:
+            return json.load(f).get("permissions", {})
+    except (ValueError, OSError):
+        return {}
+
+cfg = config_perms()
+home_edit = "Edit(//%s/**)" % os.path.expanduser("~/.claude").lstrip("/")
+
+perms = settings.get("permissions", {})
+removed = 0
+for key in ("allow", "ask", "deny"):
+    if key not in perms:
+        continue
+    drop = set(marker.get(key, [])) | set(cfg.get(key, []))
+    if key == "allow":
+        drop.add(home_edit)
+    kept = [r for r in perms[key] if r not in drop]
+    removed += len(perms[key]) - len(kept)
+    if kept:
+        perms[key] = kept
+    else:
+        del perms[key]
 
 # Hooks: remove OURS structurally, not just what the marker lists, so a stale or
 # lost marker still leaves a clean settings. Ours = a command at
@@ -85,7 +114,8 @@ if not hooks:
 with open(settings_path, "w") as f:
     json.dump(settings, f, indent=2)
     f.write("\n")
-print("removed: managed permissions and hooks" if managed else "nothing managed to remove")
+print("removed: %d permission rule(s) and our hooks" % removed if removed
+      else "no managed permission rules found to remove; hooks cleaned structurally")
 PY
 }
 
@@ -130,12 +160,23 @@ PY
 unlink_repo_symlinks skills
 unlink_repo_symlinks commands
 unmerge_config
-remove_helpers
-remove_path_line
+
+# The PATH line and the helper binaries are omitted in --reinstall mode: install
+# re-adds both right after, idempotently, and touching them here is what would
+# break install idempotency (uninstall's rstrip of the .zshrc PATH block differs
+# byte-for-byte from how install re-appends it). A real uninstall removes them.
+if [ "$REINSTALL_MODE" -eq 0 ]; then
+  remove_helpers
+  remove_path_line
+fi
 
 # Drop the drift-check marker the installer recorded (the SessionStart hook and
 # the helper itself are already removed by unmerge_config / remove_helpers).
 rm -f "$CLAUDE_DIR/.keru-installed-rev" && echo "removed: $CLAUDE_DIR/.keru-installed-rev"
+
+# When install.sh calls this as a pre-clean, it re-installs right after, so the
+# restart notice and the "left in place" summary do not apply yet.
+[ "$REINSTALL_MODE" -eq 1 ] && exit 0
 
 echo "Done. Restart Claude Code sessions to apply."
 echo ""

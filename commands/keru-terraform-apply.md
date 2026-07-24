@@ -1,12 +1,11 @@
 ---
-name: keru-terraform-apply
 description: Guide a person through, or execute for them, a terraform change from local through the dp CLI (dp awsso login, dp terraform run terraform init/plan/apply) against an environment picked explicitly, for any repo laid out as terraform/environments/<env>. Explicit call only. Two modes, same steps: walk the user through each step (they run it), or run it yourself and report. Asks which environment before touching anything, previews with an unlocked plan, scopes the blast radius with -target, confirms before the destructive apply, and never applies to production (the pipeline owns prod). Use when a terraform change needs the apply that CI does not run.
 disable-model-invocation: true
 ---
 
 # Terraform Apply
 
-Run a terraform change from local, safely, through the `dp` CLI, against an environment the user names. The Playbook's always-on rules apply (verify never assume, never fabricate, and above all the safety line: `terraform apply` is destructive, so it is confirmed as a separate intentional step). This skill adds the terraform-specific procedure.
+Run a terraform change from local, safely, through the `dp` CLI, against an environment the user names. The Playbook's always-on rules apply (verify never assume, never fabricate, and above all the safety line: `terraform apply` is destructive, so it is confirmed as a separate intentional step). This command adds the terraform-specific procedure.
 
 The reason it exists: CI runs `terraform plan` on every PR but never `apply`, and `plan` can pass while `apply` fails (name conflicts, IAM eventual consistency, quotas, or an API that validates fields the provider does not check locally). This is the manual apply that closes that gap. It does not touch CI and it does not replace the PR plan; it runs the same plan locally only to produce the file it applies.
 
@@ -24,7 +23,7 @@ Either way the ordering, the environment question, `-target`/`-lock=false`, and 
 ## Scope
 
 - **In:** login, init, an unlocked preview plan, and a confirmed apply against `staging` / `uat` / a disposable sandbox, scoped to the changed resource(s) with `-target` when possible. Generic: works in any repo whose terraform lives under `terraform/environments/<env>` with an S3 backend.
-- **Out:** `production` (the pipeline owns prod, this skill never applies there); editing CI/workflows; writing the terraform change itself (that is `keru-writing-code`). Explicit call only, this never auto-fires on a `.tf` edit.
+- **Out:** `production` (the pipeline owns prod, this command never applies there); editing CI/workflows; writing the terraform change itself (that is `keru-writing-code`). Explicit call only, this never auto-fires on a `.tf` edit.
 
 ## The safety model
 
@@ -42,7 +41,7 @@ Two levers keep an apply from breaking the environment, use both:
 
 Ask the environment first, before running anything. Never infer it.
 
-1. **Pick the environment (ask the user).** List the envs (`dp terraform list environments`, or `terraform/environments/*`) and ask which one. **If the answer is production, stop:** this skill does not apply to prod; that is the pipeline's job. Proceed only for staging / uat / a sandbox env.
+1. **Pick the environment (ask the user).** List the envs (`dp terraform list environments`, or `terraform/environments/*`) and ask which one. **If the answer is production, stop:** this command does not apply to prod; that is the pipeline's job. Proceed only for staging / uat / a sandbox env.
 2. **Log in with dp.** The plugin needs a valid SSO session with the environment's profile configured:
    ```bash
    dp awsso login
@@ -75,7 +74,7 @@ Ask the environment first, before running anything. Never infer it.
 - **`No valid credential sources found`**: the SSO session expired or the plugin could not resolve the profile. Re-run `dp awsso login` and confirm the env's profile is configured, then retry.
 - **`Backend initialization required`**: `init` was skipped for this env (step 4). Run the init command above, then re-plan.
 - **`Module not installed` on `validate`**: `terraform validate` cannot run against a bare module dir without init; run it inside a full environment (staging/uat) that has been `init`ed, not against `modules/<x>` directly.
-- **Plan passes but apply fails with an API 4xx**: this is exactly the gap this skill exists for, the provider does not validate everything the upstream API does. It is a real finding, not a flake. Read the error, fix the terraform (that is `keru-writing-code`), and re-plan. Examples seen with the Datadog provider: an alert type the SLO API rejects (use a supported type), an invalid enum value on a field, or a required field the provider let through empty. Do not `-auto-approve` past it.
+- **Plan passes but apply fails with an API 4xx**: this is exactly the gap this command exists for, the provider does not validate everything the upstream API does. It is a real finding, not a flake. Read the error, fix the terraform (that is `keru-writing-code`), and re-plan. Examples seen with the Datadog provider: an alert type the SLO API rejects (use a supported type), an invalid enum value on a field, or a required field the provider let through empty. Do not `-auto-approve` past it.
 
 ## Before delivering
 

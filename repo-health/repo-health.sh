@@ -35,12 +35,14 @@ warn() { WARNINGS+=("$1"); }
 # own README.
 check_docs() {
   local skills_dir="$REPO_DIR/skills"
+  local commands_dir="$REPO_DIR/commands"
   local skills_md="$REPO_DIR/docs/skills.md"
 
   # Each skill is its own slash command: the directory name under skills/ is the
-  # command name, so skills are named keru-*. A typed-only command is just a skill
-  # with disable-model-invocation in its frontmatter, still under skills/. Every
-  # skill on disk must be documented in docs/skills.md.
+  # command name, so skills are named keru-*. A typed-only, state-changing action
+  # lives instead under commands/ as a native command file (keru-<name>.md), kept
+  # separate so its "never auto-fire" nature is visible in the layout. Every skill
+  # dir AND every command file on disk must be documented in docs/skills.md.
   for d in "$skills_dir"/*/; do
     [ -d "$d" ] || continue
     local name; name="$(basename "$d")"
@@ -52,12 +54,27 @@ check_docs() {
       *) fail "skill '$name' is not prefixed keru-; its slash command would not show as /keru-*" ;;
     esac
   done
+  for f in "$commands_dir"/*.md; do
+    [ -e "$f" ] || continue
+    local name; name="$(basename "$f" .md)"
+    # Anchor to a catalogue ROW (leading `| ` cell), not any backticked mention:
+    # a command name can also appear inline as prose (e.g. "uses the `keru-repo-update`
+    # helper"), which must not count as being documented in the catalogue.
+    if ! grep -qE "^\| \`$name\`" "$skills_md"; then
+      fail "command '$name' exists but is not in docs/skills.md"
+    fi
+    case "$name" in
+      keru-*) : ;;
+      *) fail "command '$name' is not prefixed keru-; its slash command would not show as /keru-*" ;;
+    esac
+  done
 
-  # Orphan entries: a skill the catalogue table lists but no longer exists.
+  # Orphan entries: a skill/command the catalogue lists but no longer exists as
+  # either a skills/<name>/ dir or a commands/<name>.md file.
   while IFS= read -r name; do
     [ -n "$name" ] || continue
-    if [ ! -d "$skills_dir/$name" ]; then
-      fail "docs/skills.md lists skill '$name' but skills/$name/ does not exist"
+    if [ ! -d "$skills_dir/$name" ] && [ ! -f "$commands_dir/$name.md" ]; then
+      fail "docs/skills.md lists '$name' but neither skills/$name/ nor commands/$name.md exists"
     fi
   done < <(grep -oE '^\| `keru-[a-z-]+`' "$skills_md" | tr -d '|` ')
 }
