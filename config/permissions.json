@@ -113,6 +113,12 @@
       "Bash(pup metrics query *)",
       "Bash(pup metrics search *)",
       "Bash(pup metrics list *)",
+      "Bash(pup monitors search *)",
+      "Bash(pup monitors get *)",
+      "Bash(pup monitors list *)",
+      "Bash(pup slos list *)",
+      "Bash(pup slos get *)",
+      "Bash(pup slos status *)",
       "Bash(pup auth status *)",
       "Bash(pup auth status)"
     ],
