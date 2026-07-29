@@ -35,8 +35,10 @@ Use exactly this shape per service:
 ```text
 **<service>**
 PRs:
+
 - <PR title>: <url>
 - <PR title>: <url>
+
 Security (no fixing PR): <package/advisory>, <package/advisory>
 <security_url>
 ```

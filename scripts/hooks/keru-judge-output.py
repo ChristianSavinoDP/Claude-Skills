@@ -136,9 +136,16 @@ def _ask_judge(prompt):
     if not dp:
         return None
     try:
+        # Runs on Sonnet (--model sonnet): a compliance read of tone/verification/
+        # shape against a fixed rubric is well within Sonnet's reach and does not
+        # need the default (Opus) tier this call inherited before, so it is
+        # cheaper and faster. --no-session-persistence: throwaway one-shot, do not
+        # leave a resumable session on disk. timeout=40 sits under the hook's own
+        # 45s budget (see config/hooks.json), fail-open on timeout.
         proc = subprocess.run(
-            [dp, "ai", "claude", "-p", "--bare", prompt],
-            capture_output=True, text=True, timeout=55)
+            [dp, "ai", "claude", "-p", "--bare", "--model", "sonnet",
+             "--no-session-persistence", prompt],
+            capture_output=True, text=True, timeout=40)
     except Exception:
         return None
     out = (proc.stdout or "").strip()

@@ -114,6 +114,9 @@ def main():
     lang = co.check_english(content)
     if lang[0] == "violation":
         problems.append(lang[1])
+    md = co.check_markdown(content)
+    if md[0] == "violation":
+        problems.append(md[1])
 
     if not problems:
         return  # compliant: allow the write

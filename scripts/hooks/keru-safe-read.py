@@ -158,6 +158,30 @@ DANGEROUS_FLAG_TOKENS = {"-exec", "-execdir", "-delete", "-fprint", "-fprintf",
 # check must be scoped to these, not applied globally.
 INPLACE_COMMANDS = {"sed", "gsed", "perl"}
 
+# `make <target>` targets that are universally local-reversible (build / test /
+# lint / codegen), the same category as `go test` / `npm test` / `pytest` already
+# trusted wholesale. This is the hot path of keru-writing-code and
+# keru-responding-to-ci (`make lint-local`, `make test`), which otherwise fell to
+# the slow model judge on every run. A target NOT in this set (`deploy`,
+# `release`, `publish`, `push`, `install`) is not provably safe and defers to the
+# judge; bare `make` (the default target, unknowable) defers too.
+MAKE_SAFE_TARGETS = {
+    "test", "tests", "unit", "unit-test", "unit-tests", "integration",
+    "integration-test", "e2e", "lint", "lint-local", "lint-fix", "lints",
+    "vet", "check", "checks", "build", "compile", "fmt", "format", "gofmt",
+    "generate", "gen", "codegen", "mocks", "proto", "tidy", "deps", "vendor",
+    "verify", "coverage", "cover", "typecheck", "validate", "precommit",
+    "pre-commit", "clean",
+}
+# make flags that consume the FOLLOWING token as a value (a path/file), so it is
+# not a target. -j/--jobs and the load flags take an OPTIONAL numeric value,
+# handled separately below. On any parse ambiguity the target check simply
+# defers (safe, never unsafe).
+MAKE_VALUE_FLAGS = {"-C", "-f", "-o", "-W", "-I", "--directory", "--file",
+                    "--makefile", "--old-file", "--assume-old", "--what-if",
+                    "--new-file", "--assume-new", "--include-dir"}
+MAKE_OPTIONAL_NUM_FLAGS = {"-j", "--jobs", "-l", "--load-average", "--max-load"}
+
 
 def _is_inplace_flag(tok: str) -> bool:
     # exactly -i, or -i<suffix> like -i.bak, or --in-place[=...].
@@ -205,6 +229,41 @@ def _is_redirect_token(tok: str) -> bool:
     if not tok or not any(c in "<>" for c in tok):
         return False
     return all(c in _REDIR_CHARS or c.isdigit() for c in tok)
+
+
+def _make_is_safe(tokens) -> bool:
+    """`make [flags] [target ...]`: safe iff every explicit target is in
+    MAKE_SAFE_TARGETS. Skips flags and their values so a value token (a path
+    after -C/-f, a job count after -j) is never mistaken for a target. Bare
+    `make` (no explicit target) runs the Makefile's default, which is unknowable,
+    so it defers. Any parse ambiguity defers (returns False): the fast path must
+    never approve a target it did not positively confirm."""
+    args = tokens[1:]
+    targets = []
+    i = 0
+    while i < len(args):
+        t = args[i]
+        if t in MAKE_VALUE_FLAGS:
+            i += 2  # flag consumes the next token as its value
+            continue
+        if t in MAKE_OPTIONAL_NUM_FLAGS:
+            # -j / -l take an OPTIONAL numeric value; skip it only if numeric.
+            if i + 1 < len(args) and args[i + 1].isdigit():
+                i += 2
+            else:
+                i += 1
+            continue
+        if t.startswith("-"):
+            i += 1  # any other flag (or --opt=value): no separate value token
+            continue
+        if "=" in t:
+            i += 1  # a VAR=value override, not a target
+            continue
+        targets.append(t)
+        i += 1
+    if not targets:
+        return False  # bare `make`: default target unknown, defer
+    return all(t in MAKE_SAFE_TARGETS for t in targets)
 
 
 def tokens_are_safe(tokens) -> bool:
@@ -417,6 +476,12 @@ def tokens_are_safe(tokens) -> bool:
         sub = tokens[1] if len(tokens) > 1 else ""
         if sub != "audit":
             return False
+    elif base in ("make", "gmake"):
+        # `make <target>` is local-reversible iff every target is a known
+        # build/test/lint/codegen target (MAKE_SAFE_TARGETS). A deploy/publish/
+        # release target, or a bare `make` (unknown default), defers to the judge.
+        if not _make_is_safe(tokens):
+            return False
     elif base not in READ_ONLY:
         return False
     inplace_risky = base in INPLACE_COMMANDS
@@ -564,13 +629,20 @@ def judge_with_model(command):
         return "ask"
     prompt = JUDGE_SYSTEM + "\n\nCommand:\n" + command
     try:
-        # --no-session-persistence: the judge is a throwaway one-shot classifier,
+        # This is a one-word ALLOW/ASK classifier, not a reasoning task, so it
+        # runs on Haiku (--model haiku): far faster and cheaper than the default
+        # model, which is what dominated the perceived latency of every unlisted
+        # command. --no-session-persistence: the judge is a throwaway one-shot,
         # so its session must NOT be saved to disk (otherwise every deferred
         # command leaves a resumable session that clutters the `dp ai claude`
-        # history). Requires --print, which -p already sets.
+        # history). Requires --print, which -p already sets. timeout=12 sits under
+        # the hook's own 15s budget with room to fail-safe to ASK: a classifier
+        # that has not answered in 12s is not worth blocking the turn on: asking
+        # you is faster than waiting.
         proc = subprocess.run(
-            [dp, "ai", "claude", "-p", "--bare", "--no-session-persistence", prompt],
-            capture_output=True, text=True, timeout=25)
+            [dp, "ai", "claude", "-p", "--bare", "--model", "haiku",
+             "--no-session-persistence", prompt],
+            capture_output=True, text=True, timeout=12)
     except Exception:
         return "ask"
     out = (proc.stdout or "").strip().upper()

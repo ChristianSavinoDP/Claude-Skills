@@ -16,16 +16,18 @@ are gated on that opening:
   - investigation: opens with a markdown heading (`#`/`##`), no generic intro.
   - addressing-pr-comments: opens with the first comment block (a `path:line`
     ref or a heading), not an intro/summary sentence.
-The hook checks only the OPENING (the one part with a hard, machine-checkable
-invariant) and only when the message clearly IS the deliverable, so trailing
-content and genuine non-deliverable replies (a clarifying question) are left
-alone.
+Once the message is confirmed to BE the deliverable (its opening is right), three
+Playbook-wide rules are checked on its body: no em dashes, English only, and
+well-formed markdown (fences closed, lists blank-line-separated). The opening is
+the per-skill invariant; those three are the same for every deliverable. It runs
+only when the message clearly IS the deliverable, so trailing content and genuine
+non-deliverable replies (a clarifying question) are left alone.
 
 Bounded and fail-open like keru-require-skill: honors stop_hook_active (caps at
 one block per turn), and only blocks when the message clearly IS the deliverable
 but malformed; a clarifying question or pushback (which does not look like the
-deliverable) is left alone. Only the OPENING is checked, so legitimate trailing
-content (an offer to post, a note) after a correct template is fine.
+deliverable) is left alone. Legitimate trailing content (an offer to post, a
+note) after a correct template is fine.
 """
 import json
 import re
@@ -288,6 +290,91 @@ def check_english(msg):
     return "ok", ""
 
 
+# Playbook "Well-formed markdown" rule, applied to deliverable content. This is
+# RENDER-correctness, not linter style: the repo deliberately uses long lines and
+# opens every deliverable with a bold header (not an h1), so line-length (MD013)
+# and first-line-heading (MD041) are intentionally NOT checked, only the two
+# things that actually break rendering:
+#   1. code fences must be balanced and closed (an unclosed ``` swallows the rest
+#      of the document into a code block);
+#   2. a top-level list must be separated from the paragraph text above and below
+#      it by a blank line (MD032); glued together, markdown renders the paragraph
+#      into the list or drops the blank-less boundary.
+# Conservative like check_no_em_dash / check_english: only indent-0 lists are
+# inspected, fenced content is skipped, and continuation/nested (indented) lines
+# never end a list, so a legitimate deliverable does not trip it.
+LIST_ITEM_RE = re.compile(r"^([-*+]|\d+[.)])\s")
+FENCE_OPEN_RE = re.compile(r"(`{3,})(.*)$")
+FENCE_LINE_RE = re.compile(r"^(`{3,})\s*$")
+
+
+def _md_tokens(msg):
+    """Yield (cls, line) for each line OUTSIDE code fences, cls one of
+    'blank'|'list'|'indent'|'para'. A fenced block is collapsed to a single 'para'
+    token at its opening line (a fence is a block, like a paragraph, for the
+    blank-line-around-lists rule). Fence close is CommonMark-lenient: a bare fence
+    line of at least the opening length closes it, so inner fences of a different
+    length are content, not a spurious close. If a fence is still open at EOF, a
+    final ('open_fence', <delim>) token signals the imbalance."""
+    fence = None
+    for line in msg.splitlines():
+        stripped = line.strip()
+        if fence is not None:
+            m = FENCE_LINE_RE.match(stripped)
+            if m and len(m.group(1)) >= len(fence):
+                fence = None
+            continue
+        m = FENCE_OPEN_RE.match(stripped)
+        if m:
+            fence = m.group(1)
+            yield "para", line          # the fence block, as one paragraph-like token
+            continue
+        if not stripped:
+            yield "blank", line
+        elif LIST_ITEM_RE.match(line):
+            yield "list", line
+        elif line[:1].isspace():
+            yield "indent", line
+        else:
+            yield "para", line
+    if fence is not None:
+        yield "open_fence", fence
+
+
+def check_markdown(msg):
+    """Playbook 'well-formed markdown' rule (render-correctness; see the note on
+    _md_tokens for why line-length and first-line-heading are excluded). Returns
+    ('ok'|'violation', reason)."""
+    prev_cls = None
+    in_list = False
+    for cls, line in _md_tokens(msg):
+        if cls == "open_fence":
+            return ("violation",
+                    "it has an unclosed code fence (opened with %r and never "
+                    "closed), so the rest of the document renders as code." % line)
+        if cls == "blank":
+            in_list = False
+        elif cls == "list":
+            if not in_list and prev_cls == "para":
+                return ("violation",
+                        "a list is glued to the text above it with no blank line "
+                        "(markdown renders them as one block); add a blank line "
+                        "before %r." % line.strip()[:60])
+            in_list = True
+        elif cls == "indent":
+            pass  # continuation / nested content: stays within the current block
+        else:  # para
+            if in_list:
+                return ("violation",
+                        "a list is glued to the text below it with no blank line "
+                        "(markdown renders them as one block); add a blank line "
+                        "before %r." % line.strip()[:60])
+            in_list = False
+        if cls != "indent":
+            prev_cls = cls
+    return "ok", ""
+
+
 # Strong structural fingerprints: forms that ONLY a given deliverable produces,
 # so finding one identifies the message as that deliverable from its shape alone.
 # This is the PRIMARY way the gate decides what it is looking at: the deliverable
@@ -437,6 +524,10 @@ def main():
             lang = check_english(msg)
             if lang[0] == "violation":
                 verdict, reason = lang
+            else:
+                md = check_markdown(msg)
+                if md[0] == "violation":
+                    verdict, reason = md
     if verdict != "violation":
         _diag(data, fired="yes", skill=skill, action="pass-" + verdict)
         return  # compliant, or does not look like the deliverable: leave it alone
@@ -492,6 +583,9 @@ def check_file_cli():
     lang = check_english(msg)
     if lang[0] == "violation":
         problems.append(lang[1])
+    md = check_markdown(msg)
+    if md[0] == "violation":
+        problems.append(md[1])
     if problems:
         print("NOT COMPLIANT (%s):" % skill)
         for p in problems:

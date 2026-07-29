@@ -81,6 +81,17 @@ def test_safe_read():
         ("gh api --method GET", "gh api --method GET search/code -f q=foo --jq .total_count"),
         ("gh api --method=GET", "gh api --method=GET search/code -f q=foo"),
         ("gh api -XGET glued", "gh api -XGET search/code -f q=foo"),
+        # `make <target>` for a build/test/lint/codegen target is local-reversible
+        # (the hot path of writing-code / responding-to-ci), so it fast-allows
+        # without a model call, same category as `go test` / `pytest`.
+        ("make test", "make test"),
+        ("make lint-local", "make lint-local"),
+        ("make multi safe targets", "make lint test"),
+        ("make -C sub build", "make -C ./sub build"),
+        ("make -j4 test", "make -j4 test"),
+        ("make VAR override", "make FOO=bar test"),
+        ("gmake check", "gmake check"),
+        ("make chained with go test", "make lint-local && go test ./..."),
     ]
     for name, cmd in allow:
         check("safe-read fast-allows: " + name, sr_decision(cmd) == "allow")
@@ -98,7 +109,13 @@ def test_safe_read():
         ("python script", "python main.py"),
         ("python -m http.server", "python -m http.server"),
         ("docker ps (unknown to parser)", "docker ps -a"),
-        ("py_compile && make", "python -m py_compile a.py && make build"),
+        # `make build` alone is safe now (a known target), so to keep testing the
+        # "unknown command never auto-allowed" guarantee this pairs py_compile with
+        # a make target NOT in the safe set (`deploy`), which must still defer.
+        ("py_compile && make deploy", "python -m py_compile a.py && make deploy"),
+        ("make bare (unknown default target)", "make"),
+        ("make deploy", "make deploy"),
+        ("make test + deploy (one unsafe taints)", "make test deploy"),
         ("gh api POST", "gh api -X POST repos/o/r/issues"),
         # No explicit method but field flags present: gh auto-switches GET->POST,
         # so this is a write and must defer.
@@ -268,7 +285,7 @@ def test_check_output():
           not co_block("keru-pr-review", "What PR number should I review?"))
 
     # writing-tickets: title-first passes; prose intro blocks.
-    good_ticket = "**Fix the thing**\n\nProblem.\n\n### Acceptance Criteria\n- x"
+    good_ticket = "**Fix the thing**\n\nProblem.\n\n### Acceptance Criteria\n\n- x"
     check("ticket title-first -> no block", not co_block("keru-writing-tickets", good_ticket))
     check("ticket prose intro -> BLOCK",
           co_block("keru-writing-tickets",
@@ -284,7 +301,7 @@ def test_check_output():
                    "Based on the branch work, here is the description.\n\n## What Changed\nstuff"))
 
     # investigation: heading-first passes; generic intro blocks.
-    good_inv = "## How onboarding works\n\nThe consumer registers via...\n\n## Sources\n- x"
+    good_inv = "## How onboarding works\n\nThe consumer registers via...\n\n## Sources\n\n- x"
     check("investigation heading-first -> no block", not co_block("keru-investigation", good_inv))
     check("investigation generic intro -> BLOCK",
           co_block("keru-investigation",
@@ -301,7 +318,7 @@ def test_check_output():
 
     # bot-triage: bold service header first passes; intro blocks. (Links use ':'
     # not an em dash, matching the no-em-dash rule the template now follows.)
-    good_bot = "**xapi**\nPRs:\n- bump x: http://u\nSecurity (no fixing PR): none"
+    good_bot = "**xapi**\nPRs:\n\n- bump x: http://u\n\nSecurity (no fixing PR): none"
     check("bot-triage service-header-first -> no block", not co_block("keru-bot-triage", good_bot))
     check("bot-triage intro before service -> BLOCK",
           co_block("keru-bot-triage",
@@ -347,17 +364,43 @@ def test_check_output():
                  "- Los duplicados quedan cerrados.")
     check("Spanish ticket prose -> BLOCK", co_block("keru-writing-tickets", es_ticket))
     en_ticket = ("**Close the duplicate PRs**\n\nClose the stale duplicate bot PRs and "
-                 "remediate the alerts.\n\n### Acceptance Criteria\n- The duplicates are closed.")
+                 "remediate the alerts.\n\n### Acceptance Criteria\n\n- The duplicates are closed.")
     check("English ticket prose -> no block", not co_block("keru-writing-tickets", en_ticket))
     # Spanish-only inverted punctuation alone is enough to prove non-English.
     es_punct = "**Arreglar esto**\n\n¿Por qué falla?\n\n### Acceptance Criteria\n- x"
     check("Spanish inverted punctuation -> BLOCK", co_block("keru-writing-tickets", es_punct))
     # False-positive guard: an English deliverable naming foreign identifiers/pkgs
     # in code (path-to-regexp, a repo slug) must NOT be flagged as non-English.
-    en_with_code = ("**xapi**\nPRs:\n- bump `path-to-regexp` in los-angeles-svc: http://u\n"
+    en_with_code = ("**xapi**\nPRs:\n\n- bump `path-to-regexp` in los-angeles-svc: http://u\n\n"
                     "Security (no fixing PR): none")
     check("English deliverable with foreign code tokens -> no block",
           not co_block("keru-bot-triage", en_with_code))
+
+    # Well-formed-markdown rule (Playbook, render-correctness). A deliverable whose
+    # opening/em-dash/language are all fine is STILL blocked if a list is glued to
+    # surrounding text or a code fence is left unclosed; the clean twin passes.
+    # This is the MD032/unclosed-fence class the datadog report tripped live.
+    md_glued_above = ("**svc**\nVolume: 7 errors over 24h\n- foo: bar, one recurring error x3\n"
+                      "- baz\n\nTicket candidates: none")
+    check("list glued to text above -> BLOCK (datadog)", co_block("keru-datadog-audit", md_glued_above))
+    md_glued_below = ("**svc**\nVolume: 7 errors over 24h\n\n- foo: bar, one recurring error x3\n"
+                      "- baz\nTicket candidates: none")
+    check("list glued to text below -> BLOCK (datadog)", co_block("keru-datadog-audit", md_glued_below))
+    md_clean = ("**svc**\nVolume: 7 errors over 24h\n\n- foo: bar, one recurring error x3\n"
+                "- baz\n\nTicket candidates: none")
+    check("list with blank lines -> no block (datadog)", not co_block("keru-datadog-audit", md_clean))
+    # Unclosed fence anywhere in a deliverable body swallows the rest as code.
+    md_unclosed = ("**svc**\nVolume: 7 errors\n\n- foo\n\nTicket candidates: none\n\n```text\nleftover")
+    check("unclosed code fence -> BLOCK (datadog)", co_block("keru-datadog-audit", md_unclosed))
+    # False-positive guards: nested fences of different lengths are valid (the
+    # pr-review paste block nests a ```` inside `````), and an indented
+    # continuation line under a list item does not end the list.
+    md_nested_ok = ("Verdict: Comment\n\n### Questions\n`a.go:1`\n\nComment (paste into the PR):\n\n"
+                    "`````\nSome prose with an inner ```go fence shown literally.\n`````\n\nWhy: nit.")
+    check("nested/longer fences -> no block (pr-review)", not co_block("keru-pr-review", md_nested_ok))
+    md_cont_ok = ("**Fix the thing**\n\nProblem.\n\n### Acceptance Criteria\n\n- one, which\n"
+                  "  continues on an indented line\n- two")
+    check("indented list continuation -> no block (ticket)", not co_block("keru-writing-tickets", md_cont_ok))
 
     # NON-DELIVERABLE turns must never be gated: a turn that asks for missing
     # context or waits on a design decision is not the deliverable, so the gate
@@ -398,7 +441,7 @@ def test_check_output():
     # ticket WELL-FORMED but no skill loaded: bold title + AC fingerprints it, so
     # an em dash or other body issue would still be checked. (Opening is fine here.)
     check("no-skill ticket well-formed (title + ### AC) -> no block",
-          not co_block_noskill(free, "**Fix the thing**\n\nProblem.\n\n### Acceptance Criteria\n- x"))
+          not co_block_noskill(free, "**Fix the thing**\n\nProblem.\n\n### Acceptance Criteria\n\n- x"))
     # Accepted limit: a ticket that OPENS with prose and was produced with no
     # /keru-* command has no strong fingerprint (the title-first form is the
     # fingerprint), so it is not gated. Firing on a bare '### Acceptance Criteria'
@@ -530,7 +573,7 @@ def test_write_gate():
           not gate_denies("/tmp/keru-deliverable-writing-tickets-EN.md",
                           "**Close the duplicate PRs**\n\nClose the stale duplicate "
                           "bot PRs and remediate the security alerts.\n\n"
-                          "### Acceptance Criteria\n- The duplicates are closed."))
+                          "### Acceptance Criteria\n\n- The duplicates are closed."))
     # A stem that names no known skill is not gated (allowed), even malformed.
     check("write-gate: unknown skill stem -> allow",
           not gate_denies("/tmp/keru-deliverable-nonsense-skill.md", "Whatever — prose."))
@@ -540,7 +583,7 @@ def test_write_gate():
                       "Here is the ticket:\n\n**T**\n\n### Acceptance Criteria\n- x"))
     check("write-gate: valid ticket -> allow",
           not gate_denies("/tmp/keru-deliverable-writing-tickets.md",
-                          "**Fix it**\n\nProblem.\n\n### Acceptance Criteria\n- x"))
+                          "**Fix it**\n\nProblem.\n\n### Acceptance Criteria\n\n- x"))
     # Edit tool on a deliverable file is gated too (new_string validated).
     check("write-gate: Edit malformed review -> deny",
           gate_denies(P, "Intro prose.\n\nVerdict: Approve\n\n### Nits\n`a.go:1`\nWhy: ok.", tool="Edit"))

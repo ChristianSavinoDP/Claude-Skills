@@ -83,10 +83,12 @@ Write the report to `/tmp/keru-deliverable-datadog-audit.md` first (the Playbook
 Lead with substance. If any monitor is firing, open with a one-line **Firing monitors:** roll-up (`<name> (<service>)`, or "none") so the team's own alarms lead; then the per-service sections. Order services worst-first (a firing monitor or a real spike at the top, then highest volume). Use this shape per service:
 
 ```text
-**<service>**  <— firing: <monitor name> | (no line if none)
+**<service>**  <- firing: <monitor name> | (no line if none)
 Volume: <count> errors over <window><, spiking vs <baseline> | , flat>
+
 - <error_type>: <short error_message>, one recurring error x<count> [OURS: <the stack frame / repo line, or the cause keru-debugging confirmed> | EXTERNAL: <the downstream status / client cause> | UNESTABLISHED: still unsettled after a keru-debugging pass, with its most-supported hypothesis]
 - <next issue...>
+
 Ticket candidates: <error_type> (recurring + ours) | <monitor/SLO> (firing) | none
 ```
 
