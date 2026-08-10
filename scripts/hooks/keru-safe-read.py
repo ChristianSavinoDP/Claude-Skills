@@ -28,6 +28,84 @@ import shutil
 import subprocess
 import sys
 
+# --- "this repo" recognition -------------------------------------------------
+# A command that runs THIS repo's own dev tooling (its test harness, installer,
+# hook/helper scripts) is the user's version-controlled tooling, trusted
+# wholesale the same way the keru-* helpers are: running one auto-approves. To
+# recognize such a command the hook needs this machine's repo path, which is
+# machine-specific and so cannot be committed (principle 9). The installer bakes
+# it into the INSTALLED copy by replacing the placeholder below; the committed
+# source keeps the placeholder and falls back to locating the repo relative to
+# its own path, which works when the source is run in place (the test harness).
+_BAKED_REPO_DIR = "__KERU_REPO_DIR__"  # replaced with the repo path at install
+_INTERPRETERS = {"python", "python3", "py", "bash", "sh", "zsh", "node",
+                 "ruby", "perl"}
+
+
+def _looks_like_repo(d) -> bool:
+    """True if d is the Claude-Skills repo root (contains this very hook and the
+    playbook). This guards the __file__ fallback: the installed copy lives in
+    ~/.local/bin, whose grandparent is $HOME, not the repo — so it fails this
+    check and defers to the baked path rather than trusting all of $HOME."""
+    return bool(d) and os.path.isfile(
+        os.path.join(d, "scripts", "hooks", "keru-safe-read.py")
+    ) and os.path.isdir(os.path.join(d, "playbook"))
+
+
+def _resolve_repo_dir():
+    """The repo root, or None. Prefer the baked path (installed copy); fall back
+    to two dirs up from this file (source run in place). Each candidate is
+    validated by _looks_like_repo, so the unreplaced placeholder and the
+    installed copy's bogus $HOME grandparent both correctly resolve to None."""
+    for cand in (_BAKED_REPO_DIR,
+                 os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              "..", "..")):
+        try:
+            rp = os.path.realpath(cand)
+        except Exception:
+            continue
+        if _looks_like_repo(rp):
+            return rp
+    return None
+
+
+_REPO_DIR = _resolve_repo_dir()
+_CWD = None  # dir relative paths resolve against; set from the payload in main()
+
+
+def _executes_repo_file(tokens) -> bool:
+    """True if this segment runs a file INSIDE this repo — either the program
+    itself is a repo path (`./scripts/install.sh`, `repo-health/repo-health.sh`)
+    or it is a known interpreter whose script argument is a repo file
+    (`python3 repo-health/test-hooks.py`, `bash scripts/uninstall.sh`). Relative
+    paths resolve against the command's cwd; realpath collapses `..`/symlinks so
+    a path that escapes the repo cannot masquerade as inside it. Only the
+    executed file matters, judged per segment, so `python3 <repo-script> &&
+    <remote-mutation>` still defers the second segment."""
+    if not _REPO_DIR or not tokens:
+        return False
+    candidates = []
+    prog = tokens[0]
+    if "/" in prog:                       # program given as a path: maybe a repo script
+        candidates.append(prog)
+    if prog.split("/")[-1] in _INTERPRETERS:
+        for a in tokens[1:]:
+            if a.startswith("-"):
+                continue                  # skip flags (`-m`, `-u`, ...): a module/opt, not a file
+            candidates.append(a)          # the first non-flag arg is the script
+            break
+    root = _REPO_DIR + os.sep
+    for c in candidates:
+        p = c if os.path.isabs(c) else os.path.join(_CWD or "", c)
+        try:
+            rp = os.path.realpath(p)
+        except Exception:
+            continue
+        if (rp == _REPO_DIR or rp.startswith(root)) and os.path.isfile(rp):
+            return True
+    return False
+
+
 # Commands that only read. A pipeline made solely of these (with safe flags) is
 # safe to auto-approve.
 READ_ONLY = {
@@ -118,15 +196,22 @@ JIRA_READONLY_PAIR = {
 # tags every command with a `read_only` flag in its own --help; this is an
 # explicit allowlist (like GH_READONLY), so any path not listed (every write:
 # `cases create/jira`, `metrics submit`, `logs archives/metrics delete`,
-# `metrics metadata update`, and the interactive `auth login/logout/refresh`)
-# falls through to the model judge and prompts. Matched as an anchored prefix of
+# `metrics metadata update`, `traces metrics create/update/delete`, and the
+# interactive `auth login/logout/refresh`) falls through to the model judge and
+# prompts. Matched as an anchored prefix of
 # the positional tokens, so a flag VALUE that follows the verb can never make a
 # write path look like a read.
 PUP_READONLY = {
     ("error-tracking", "issues", "search"), ("error-tracking", "issues", "get"),
+    # traces search/aggregate read span-level APM data (walk a failing trace to
+    # its deepest erroring span). `traces metrics` is CRUD of span-based metrics
+    # (a write) and is deliberately NOT here, so it defers to the judge.
+    ("traces", "search"), ("traces", "aggregate"),
     ("logs", "search"), ("logs", "aggregate"), ("logs", "list"), ("logs", "query"),
     ("events", "search"), ("events", "list"), ("events", "get"),
     ("metrics", "query"), ("metrics", "search"), ("metrics", "list"),
+    ("monitors", "search"), ("monitors", "get"), ("monitors", "list"),
+    ("slos", "list"), ("slos", "get"), ("slos", "status"),
     ("auth", "status"), ("auth", "test"), ("auth", "list"),
     ("version",),
 }
@@ -276,6 +361,13 @@ def tokens_are_safe(tokens) -> bool:
     # A `for VAR in W1 W2 ...` header: the words are operands, not executed.
     # Approve the header outright; the loop body is its own segment(s).
     if tokens[0] in HEADER_KW:
+        return True
+    # This repo's own dev tooling (test harness, installer, hooks, helpers) is
+    # trusted wholesale: running one of its scripts auto-approves, regardless of
+    # interpreter. Checked before the per-command dispatch so `python3
+    # repo-health/test-hooks.py` and `bash scripts/install.sh` are approved
+    # where a bare `python3 <script>` / `bash <script>` would otherwise defer.
+    if _executes_repo_file(tokens):
         return True
     base = tokens[0].split("/")[-1]
     if base == "git":
@@ -471,10 +563,17 @@ def tokens_are_safe(tokens) -> bool:
         if sub != "audit":
             return False
     elif base == "keru-repo-update":
-        # Read-only only in `audit` mode; `update` switches branches and
-        # fast-forwards (mutates the working tree), so defer it.
+        # Both `audit` (read-only) and `update` are local-reversible, so both
+        # auto-allow; any other subcommand defers. `update` only stashes tracked
+        # changes (restorable via `git stash pop`) and fast-forwards with
+        # --ff-only (a pointer move: never rewrites history, never touches the
+        # remote, skips diverged repos). That is the same local-reversible line
+        # as `git checkout`/`switch` above, and matches what docs/permissions.md
+        # states ("update ... never prompts"). Unlike keru-branch-cleanup, whose
+        # `clean` deletes branches and must defer, repo-update has no destructive
+        # subcommand to withhold.
         sub = tokens[1] if len(tokens) > 1 else ""
-        if sub != "audit":
+        if sub not in ("audit", "update"):
             return False
     elif base in ("make", "gmake"):
         # `make <target>` is local-reversible iff every target is a known
@@ -661,6 +760,13 @@ def main():
     command = (data.get("tool_input") or {}).get("command", "")
     if not command or not isinstance(command, str):
         return
+
+    # cwd from the payload: relative script paths (repo-health/test-hooks.py)
+    # resolve against the directory the command runs in, so _executes_repo_file
+    # can tell whether a relative path lands inside this repo.
+    global _CWD
+    cwd = data.get("cwd")
+    _CWD = cwd if isinstance(cwd, str) and cwd else os.getcwd()
 
     # FAST PATH: provably read-only/local-reversible by static parsing. Instant.
     if command_is_safe(command):

@@ -35,16 +35,20 @@ def check(name, ok):
 
 # --- keru-safe-read ----------------------------------------------------------
 
-def sr_decision(cmd):
+def sr_decision(cmd, cwd=None):
     """Decision for a Bash command under safe-read, with the model slow-path
     neutralized (dp hidden via empty HOME/PATH) so the test is deterministic and
     offline: the fast static path still returns 'allow' for provably-safe
     commands, and anything else hits the slow path which fail-safes to 'ask'.
-    Returns 'allow', 'ask', or 'NONE' (no output)."""
+    `cwd`, if given, is passed in the payload so relative-path resolution (the
+    repo-file recognition) is deterministic. Returns 'allow', 'ask', or 'NONE'."""
     env = dict(os.environ)
     env["HOME"] = "/nonexistent"
     env["PATH"] = "/usr/bin:/bin"   # no `dp` here -> slow path fail-safes to ask
-    stdin = json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}})
+    payload = {"tool_name": "Bash", "tool_input": {"command": cmd}}
+    if cwd is not None:
+        payload["cwd"] = cwd
+    stdin = json.dumps(payload)
     out = subprocess.run([sys.executable, SAFE_READ], input=stdin,
                          capture_output=True, text=True, env=env).stdout.strip()
     if not out:
@@ -68,10 +72,24 @@ def test_safe_read():
         ("pip list piped", "pip list | grep -i boto"),
         ("python -m py_compile", "python -m py_compile src/x.py"),
         (".venv python py_compile", ".venv/bin/python -m py_compile a.py"),
+        # pup read subcommands the datadog-audit skill uses. traces search/aggregate
+        # (walk a failing trace), monitors, and slos are all reads; `traces metrics`
+        # (span-metric CRUD) is a write and must defer -> in the ask list below.
+        ("pup traces search", 'pup traces search --query "env:production service:extend-api @http.status_code:500" --from "7d" --limit 3'),
+        ("pup traces aggregate", 'pup traces aggregate --query "env:production status:error" --compute count --group-by service'),
+        ("pup traces search trace_id piped", 'pup traces search --query "env:production trace_id:abc status:error" --from 7d --limit 20 --no-agent | jq -r ".data[].attributes.service"'),
+        ("pup monitors search", 'pup monitors search --query "tag:(service:extend-api)" --per-page 50'),
+        ("pup slos status", 'pup slos status 123 --from 7d --to now'),
         ("keru-jira-dev", "keru-jira-dev DBI-1477"),
         ("keru-jira-dev probe", 'keru-jira-dev DBI-1477 2>/dev/null || echo "NO_DEV_HELPER_OR_EMPTY"'),
         ("keru-bot-triage", "keru-bot-triage o/r"),
         ("keru-branch-cleanup audit", "keru-branch-cleanup audit ~/Documents/GitHub"),
+        # keru-repo-update: both audit and update are local-reversible (update
+        # stashes + --ff-only, restorable, never touches the remote), so both
+        # fast-allow. Unlike keru-branch-cleanup clean, it has no destructive
+        # subcommand to defer.
+        ("keru-repo-update audit", "keru-repo-update audit ~/Documents/GitHub"),
+        ("keru-repo-update update", "keru-repo-update update ~/Documents/GitHub/payments"),
         # gh api with an EXPLICIT GET method: -f/-F are query-string params, not a
         # POST body, so the search is read-only. The two real-session forms.
         ("gh api -X GET search/code",
@@ -122,6 +140,10 @@ def test_safe_read():
         ("gh api -f no method (implicit POST)", "gh api repos/o/r/issues -f title=x"),
         ("gh api --method PATCH", "gh api --method PATCH repos/o/r/issues/1 -f state=closed"),
         ("keru-branch-cleanup clean", "keru-branch-cleanup clean ~/Documents/GitHub"),
+        # pup traces metrics is span-metric CRUD (a write); a flag value that
+        # happens to read "search" must not promote it to a read.
+        ("pup traces metrics create", "pup traces metrics create --file m.json"),
+        ("pup traces metrics delete", "pup traces metrics delete some-metric-id"),
     ]
     for name, cmd in ask:
         check("safe-read slow-asks (model absent): " + name, sr_decision(cmd) == "ask")
@@ -129,6 +151,38 @@ def test_safe_read():
     # Inline interpreters are NOT safe-read's job (a separate block hook denies
     # them); safe-read should not fast-allow `python -c`.
     check("safe-read does not fast-allow python -c", sr_decision('python -c "import os"') != "allow")
+
+    # THIS REPO's own tooling auto-allows regardless of interpreter: running the
+    # test harness, installer, or a hook/helper script from the repo is trusted
+    # wholesale. In the harness the source runs in place, so the hook resolves
+    # _REPO_DIR from its own path (the installed copy uses the baked path). The
+    # command's cwd is supplied so relative paths resolve against the repo.
+    repo_allow = [
+        ("test-hooks relative", "python3 repo-health/test-hooks.py", REPO),
+        ("repo-health.sh relative", "bash repo-health/repo-health.sh hooks", REPO),
+        ("install.sh dot-slash", "./scripts/install.sh", REPO),
+        ("uninstall.sh relative", "bash scripts/uninstall.sh", REPO),
+        ("hook script direct", "python3 scripts/hooks/keru-check-drift.py", REPO),
+        ("absolute repo path (no cwd needed)",
+         "python3 " + os.path.join(REPO, "repo-health", "test-hooks.py"), None),
+        ("chained with a read", "python3 repo-health/test-hooks.py | tail -5", REPO),
+    ]
+    for name, cmd, cwd in repo_allow:
+        check("safe-read allows repo tooling: " + name, sr_decision(cmd, cwd) == "allow")
+
+    # ...but the recognition is scoped and cannot be abused: a path that escapes
+    # the repo, a repo file run from the WRONG cwd (so the relative path misses),
+    # a non-existent repo path, and a repo script chained before a REMOTE
+    # mutation (per-segment: the second segment still defers) all fail closed.
+    repo_ask = [
+        ("path escaping repo", "python3 ../evil.py", REPO),
+        ("relative path from wrong cwd", "python3 repo-health/test-hooks.py", "/tmp"),
+        ("non-existent repo file", "python3 repo-health/does-not-exist.py", REPO),
+        ("repo script then git push",
+         "python3 repo-health/test-hooks.py && git push origin main", REPO),
+    ]
+    for name, cmd, cwd in repo_ask:
+        check("safe-read defers non-repo/tainted: " + name, sr_decision(cmd, cwd) == "ask")
 
 
 # --- keru-require-skill ------------------------------------------------------

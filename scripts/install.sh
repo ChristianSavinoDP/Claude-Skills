@@ -231,6 +231,25 @@ install_helpers() {
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-branch-cleanup.sh" "$BIN_DIR/keru-branch-cleanup"
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-repo-update.sh" "$BIN_DIR/keru-repo-update"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-safe-read.py" "$BIN_DIR/keru-safe-read"
+  # Bake this machine's repo path into the installed safe-read copy, so it can
+  # recognize a command that runs this repo's own tooling (test harness,
+  # installer, hooks, helpers) and auto-approve it. The path is machine-specific
+  # and cannot be committed (principle 9), so it is resolved here at install
+  # time by replacing the source's placeholder. python3 is already a hard
+  # dependency of the hooks themselves; if it is somehow absent the placeholder
+  # simply stays and safe-read falls back to locating the repo from its own path
+  # (harmless — that path just won't match for the installed copy).
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$BIN_DIR/keru-safe-read" "$REPO_DIR" <<'PY'
+import sys
+path, repo = sys.argv[1], sys.argv[2]
+with open(path) as f:
+    src = f.read()
+with open(path, "w") as f:
+    f.write(src.replace("__KERU_REPO_DIR__", repo))
+PY
+    echo "baked: repo path into $BIN_DIR/keru-safe-read"
+  fi
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-block-webfetch.py" "$BIN_DIR/keru-block-webfetch"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-block-inline-interp.py" "$BIN_DIR/keru-block-inline-interp"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-require-skill.py" "$BIN_DIR/keru-require-skill"

@@ -104,6 +104,8 @@
       "Bash(gh workflow list *)",
       "Bash(pup error-tracking issues search *)",
       "Bash(pup error-tracking issues get *)",
+      "Bash(pup traces search *)",
+      "Bash(pup traces aggregate *)",
       "Bash(pup logs search *)",
       "Bash(pup logs aggregate *)",
       "Bash(pup logs list *)",
