@@ -110,6 +110,25 @@ def test_safe_read():
         ("make VAR override", "make FOO=bar test"),
         ("gmake check", "gmake check"),
         ("make chained with go test", "make lint-local && go test ./..."),
+        # `sleep` is a pure no-op wait, so a compound that pauses then reads is as
+        # safe as the read. These are the exact forms that prompted before the fix.
+        ("sleep then echo", "sleep 1 && echo x"),
+        ("sleep then gh read", "sleep 30 && gh pr checks 821"),
+        ("sleep bare piped", "sleep 5; ls"),
+        # gofmt/goimports reformat Go source (git-reversible), same as `go fmt`.
+        ("gofmt -l", "gofmt -l ."),
+        ("gofmt -d chained", "gofmt -d . | head"),
+        ("goimports -l", "goimports -l -w internal/"),
+        # `timeout` recurses on the wrapped command: safe iff that command is.
+        ("timeout go vet", "timeout 180 go vet ./..."),
+        ("timeout with signal flag", "timeout -s KILL 60 go test ./..."),
+        ("timeout kill-after", "timeout -k 10 30 make test"),
+        ("timeout grep piped", "timeout 5 grep -rn foo . | head"),
+        # bun dev subcommands (local-reversible) and `run <safe-script>`.
+        ("bun install", "bun install"),
+        ("bun run build", "bun run build"),
+        ("bun test", "bun test"),
+        ("bun build chained", "cd apps/dbi-docs && bun run build"),
     ]
     for name, cmd in allow:
         check("safe-read fast-allows: " + name, sr_decision(cmd) == "allow")
@@ -144,6 +163,18 @@ def test_safe_read():
         # happens to read "search" must not promote it to a read.
         ("pup traces metrics create", "pup traces metrics create --file m.json"),
         ("pup traces metrics delete", "pup traces metrics delete some-metric-id"),
+        # timeout must recurse, not blanket-approve: a destructive wrapped command
+        # still defers. This is the guarantee that keeps the new timeout branch safe.
+        ("timeout wrapping rm -rf", "timeout 5 rm -rf /tmp/x"),
+        ("timeout wrapping git push", "timeout 60 git push origin main"),
+        ("timeout no command", "timeout 10"),
+        # sleep taints nothing, but a real mutation after it still defers per-segment.
+        ("sleep then git push", "sleep 5 && git push origin main"),
+        # bun run of an unknown script (could be a deploy) and bun x (fetch-exec)
+        # are not provably safe: they defer.
+        ("bun run deploy", "bun run deploy"),
+        ("bun x arbitrary pkg", "bun x some-cli --do-thing"),
+        ("bunx arbitrary pkg", "bunx create-app foo"),
     ]
     for name, cmd in ask:
         check("safe-read slow-asks (model absent): " + name, sr_decision(cmd) == "ask")

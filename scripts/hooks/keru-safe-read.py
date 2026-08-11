@@ -114,6 +114,16 @@ READ_ONLY = {
     "cut", "tr", "jq", "yq", "basename", "dirname", "realpath", "true", "test",
     "[", "[[", "read", "seq", "column", "actionlint",
     "stat", "file", "diff", "comm", "base64", "xxd",
+    # `sleep` only waits: it neither reads nor writes, so a pipeline that pauses
+    # (`sleep 60 && <read>`) is as safe as the read alone. Without it here such a
+    # compound fell to the model judge and prompted, for a pure no-op.
+    "sleep",
+    # gofmt/goimports reformat Go source (or -l/-d only list/diff). Rewriting is
+    # in-place but git-reversible, the same local-reversible category as `go fmt`
+    # (already trusted via GO_READONLY_SUB) and `make fmt`. Not treated like the
+    # sed/perl INPLACE_COMMANDS below: those run arbitrary in-place expressions on
+    # arbitrary files, whereas gofmt only applies Go's canonical formatting.
+    "gofmt", "goimports",
 }
 # Deliberately excluded from READ_ONLY: `command`, `type`, `xargs`, `env`, `sh`,
 # `bash`, etc. run their argument as another command, which would bypass this
@@ -450,6 +460,29 @@ def tokens_are_safe(tokens) -> bool:
         sub = rest[i] if i < len(rest) else ""
         if sub not in TF_READONLY_SUB:
             return False
+    elif base in ("timeout", "gtimeout"):
+        # `timeout [opts] DURATION CMD [args...]` runs CMD under a time limit, so
+        # it is safe iff CMD is: skip timeout's own flags (a couple take a value)
+        # and the DURATION positional, then recurse on the wrapped command. This
+        # is the same "run the argument as another command" shape as `mise exec
+        # --` above, so it must recurse, never be blanket-approved (else `timeout
+        # 5 rm -rf /` would ride along). Any parse ambiguity defers.
+        rest = tokens[1:]
+        i = 0
+        while i < len(rest) and rest[i].startswith("-"):
+            # -s/--signal and -k/--kill-after take a separate value unless given
+            # as =VALUE; --preserve-status/--foreground/-v/--verbose do not.
+            if rest[i] in ("-s", "--signal", "-k", "--kill-after"):
+                i += 2
+            else:
+                i += 1
+        if i >= len(rest):
+            return False  # no DURATION token: malformed, defer
+        i += 1  # skip the DURATION positional; the wrapped command follows
+        inner = rest[i:]
+        if not inner:
+            return False  # a duration with no command to run: defer
+        return tokens_are_safe(inner)
     elif base in ("command", "type", "hash"):
         # Only the lookup forms are safe (`command -v x`, `type x`). `command x`
         # would run x, bypassing this allowlist, so require a lookup flag for
@@ -574,6 +607,27 @@ def tokens_are_safe(tokens) -> bool:
         # subcommand to withhold.
         sub = tokens[1] if len(tokens) > 1 else ""
         if sub not in ("audit", "update"):
+            return False
+    elif base == "bun":
+        # bun as a dev tool: `install`/`i`/`ci`/`test`/`build` and typechecking
+        # are local-reversible (fetch deps, run tests, bundle to dist/), the same
+        # category as `npm install`/`go test` the judge already allows. `bun run
+        # <script>` (and its bare shorthand `bun <script>`) runs a package.json
+        # script, which could be anything (a deploy), so mirror `make`: allow only
+        # a known build/test/lint/codegen script name (MAKE_SAFE_TARGETS). `bun x`
+        # / `bunx` fetch-and-execute an arbitrary package (like npx): not provably
+        # safe, so it falls through to the model judge. Any parse ambiguity defers.
+        rest = [t for t in tokens[1:] if not t.startswith("-")]
+        sub = rest[0] if rest else ""
+        if sub in ("install", "i", "ci", "test", "build", "typecheck", "tsc"):
+            pass  # local-reversible dev subcommand
+        elif sub == "run":
+            script = rest[1] if len(rest) > 1 else ""
+            if script not in MAKE_SAFE_TARGETS:
+                return False
+        elif sub in MAKE_SAFE_TARGETS:
+            pass  # `bun <script>` shorthand for `bun run <safe-script>`
+        else:
             return False
     elif base in ("make", "gmake"):
         # `make <target>` is local-reversible iff every target is a known
