@@ -14,6 +14,8 @@ are gated on that opening:
   - writing-tickets: first visible line is the bold title `**...**`.
   - pr-description: opens with the bold title block `**...**`.
   - investigation: opens with a markdown heading (`#`/`##`), no generic intro.
+  - doc: opens with a markdown heading or a bold title (a companion/reference
+    doc finalized by keru-writing-docs).
   - addressing-pr-comments: opens with the first comment block (a `path:line`
     ref or a heading), not an intro/summary sentence.
 Once the message is confirmed to BE the deliverable (its opening is right), three
@@ -142,12 +144,34 @@ def check_investigation(msg):
             "%r" % first[:100])
 
 
+def check_doc(msg):
+    """The `doc` token: a companion/reference doc finalized by keru-writing-docs
+    (a runbook, README, access doc shipped with a code change). Lighter than
+    investigation on purpose: it enforces the shared mechanical bar (em dashes,
+    English, render) via the caller, and only requires a doc-shaped opening here,
+    a markdown heading OR a bold title. If it has neither and no heading anywhere,
+    it is not the deliverable (a status line), so skip."""
+    first = first_visible_line(msg)
+    if not first:
+        return "skip", ""
+    if not HEADING_ANY.search(msg) and not opens_bold(first):
+        return "skip", ""
+    if HEADING.match(first) or opens_bold(first):
+        return "ok", ""
+    return ("violation",
+            "a doc deliverable must OPEN with a markdown heading or a bold title, "
+            "no generic intro before it. Your first line was: %r" % first[:100])
+
+
 # Keyed by normalized skill name (no keru- prefix, no namespace).
 # The bold-header family shares check_bold_open; pr-review and investigation have
-# their own opening invariant (a one-word verdict / a markdown heading).
+# their own opening invariant (a one-word verdict / a markdown heading). `doc` is
+# the token keru-writing-docs writes a companion doc under (investigation mode
+# reuses the `investigation` token above); it only checks a doc-shaped opening.
 CHECKERS = {
     "pr-review": check_pr_review,
     "investigation": check_investigation,
+    "doc": check_doc,
     "writing-tickets": lambda m: check_bold_open(
         "writing-tickets", m, lambda msg, first: bool(TICKET_AC.search(msg))),
     "pr-description": lambda m: check_bold_open(

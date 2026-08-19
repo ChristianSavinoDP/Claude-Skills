@@ -16,8 +16,10 @@ tracked):
   - Separately, the local clone can just be behind origin (another machine
     pushed, or you never pulled).
 
-So this hook prints, at session start, a short notice for two independent signals
-and stays silent when there is nothing to say:
+So this hook surfaces, at session start, a short notice (via the `systemMessage`
+field of its JSON output, which Claude Code shows directly to the user rather than
+only feeding to the model) for two independent signals, and stays silent when there
+is nothing to say:
 
   A. HEAD is behind the remote default branch. To make this reflect the remote in
      THIS session (not whenever you last fetched by hand), the check does a
@@ -247,12 +249,21 @@ def _check(repo):
                 "a config/*.json edit, or a helper/hook script edit only take "
                 "effect on reinstall). Run: %s/scripts/install.sh" % repo)
 
-    if notices:
-        # SessionStart stdout becomes context for Claude, not a UI banner, so ask
-        # Claude to relay it. Only ever printed when there is real drift.
-        print("[Claude-Skills] Your install is out of date. Tell the user, then continue:")
-        for n in notices:
-            print("  - " + n)
+    return notices
+
+
+def _emit(notices):
+    """Surface the drift notices to the USER, not just to Claude. Plain stdout on
+    a SessionStart hook only enters Claude's context and relies on the model
+    choosing to repeat it (which it may not, so a real drift can go unseen). The
+    `systemMessage` field of a hook's JSON output is shown directly to the user by
+    Claude Code, independent of the model, and does not halt the session. Emit
+    nothing when there is no drift, so quiet sessions stay quiet."""
+    if not notices:
+        return
+    lines = ["[Claude-Skills] Your install is out of date:"]
+    lines += ["  - " + n for n in notices]
+    print(json.dumps({"systemMessage": "\n".join(lines)}))
 
 
 def main():
@@ -262,7 +273,7 @@ def main():
     if not args:
         return 0  # no repo given: nothing to check, stay silent
     try:
-        _check(args[0])
+        _emit(_check(args[0]))
     except Exception:
         pass  # fail-open: a broken check must never disrupt a session
     return 0

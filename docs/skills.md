@@ -40,7 +40,8 @@ Each skill is also its slash command (type the name, or just describe the task a
 | `keru-writing-code` | implement, build, or fix code | reads existing patterns first, stays in scope |
 | `keru-pr-review` | review a PR | applies the playbook's review rules |
 | `keru-addressing-pr-comments` | resolve review comments | validates each comment before applying |
-| `keru-investigation` | produce a doc, ADR, runbook, or RCA | markdown deliverable, sources at the end |
+| `keru-investigation` | produce a doc, ADR, runbook, or RCA | analysis deliverable; decides what it says, hands the finalize/verify/place to `keru-writing-docs` |
+| `keru-writing-docs` | author or finalize a repo doc (README, runbook, reference, or a doc shipped with a change) | the shared guarantee step `keru-writing-code` and `keru-investigation` hand docs to: verifies every claim against its source, enforces em-dash/English/markdownlint/render, then writes it to its home |
 | `keru-pr-description` | write a PR description | follows the repo's PR template |
 | `keru-writing-tickets` | draft a ticket | gated deliverable; drafts only, never creates it in Jira |
 | `keru-gather-context` | gather context from a ticket, PR, repo, or URL | read-only; resolves the chain both ways, can read uncloned repos |

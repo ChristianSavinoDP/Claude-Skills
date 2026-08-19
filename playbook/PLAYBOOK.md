@@ -33,6 +33,7 @@ Each kind of work has a skill that holds its rules and steps. The moment you rec
 | Resolving review comments (a person's or Copilot's) | `keru-addressing-pr-comments` |
 | Writing or changing code | `keru-writing-code` |
 | An investigation / analysis doc | `keru-investigation` |
+| Authoring or finalizing a doc that lives in a repo (README, runbook, reference, or a doc shipped with a change) | `keru-writing-docs` |
 | Writing a PR description | `keru-pr-description` |
 | Drafting a ticket | `keru-writing-tickets` |
 | Getting a ticket/PR/repo's context before acting | `keru-gather-context` |
@@ -43,7 +44,7 @@ This applies on transitions too: if one skill is already loaded and the work shi
 
 When you load any skill, do a scope check: name to yourself, in one line, what this task covers and what it does NOT, folding in any constraint the user gave (deferred a task, scoped something out, asked for analysis only). That boundary catches a task switch before it happens: if you find yourself doing something outside it, stop, it is a different task that needs its own skill. The scope check is internal; surface it to the user only when it changes what you will do (you are about to skip or defer something they should confirm). Never open a deliverable with it. When the skill defines an Output, your visible response is exactly that Output, starting on its first line, with nothing before it: no scope preamble, no "what I verified" recap, no intro. The template is the first thing you write, not context around it.
 
-**A skill deliverable is written to its gated file, never typed straight into chat.** For any skill with an "Output" section a checker covers (`pr-review`, `investigation`, `writing-tickets`, `pr-description`, `addressing-pr-comments`, `bot-triage`, `datadog-audit`), produce it this way, no exceptions:
+**A skill deliverable is written to its gated file, never typed straight into chat.** For any skill with an "Output" section a checker covers (`pr-review`, `investigation`, `writing-tickets`, `pr-description`, `addressing-pr-comments`, `bot-triage`, `datadog-audit`, and `writing-docs`, which writes under the `doc` or `investigation` token per its mode), produce it this way, no exceptions:
 
 1. Write it with the Write tool to `/tmp/keru-deliverable-<skill>-<id>.md`, where `<id>` is the ticket key or PR number the work is about (e.g. `/tmp/keru-deliverable-pr-review-3254.md`, `/tmp/keru-deliverable-writing-tickets-DBI-1477.md`). The `<id>` keeps a new deliverable from overwriting an earlier one (a prior run, or another session working in parallel); omit it only when there is genuinely no ticket or PR. The `<skill>` selects which Output contract the gate enforces. If a turn produces more than one deliverable (e.g. an investigation and then a ticket), each goes to its own file, written and gated separately.
 2. A PreToolUse gate validates the content before the file is written. If it does not comply it DENIES the write (the harness enforces this, not your judgment) and shows you why; the file is not created. Fix the content and Write again until it passes.
