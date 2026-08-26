@@ -123,6 +123,8 @@
       "Bash(keru-branch-cleanup audit *)",
       "Bash(keru-repo-update audit *)",
       "Bash(keru-repo-update update *)",
+      "Bash(keru-cache-clean audit *)",
+      "Bash(keru-cache-clean audit)",
       "Bash(jira epic list *)",
       "Bash(jira me)",
       "Bash(jira me *)",
@@ -165,6 +167,8 @@
     ],
     "ask": [
       "Bash(keru-branch-cleanup clean *)",
+      "Bash(keru-cache-clean clean *)",
+      "Bash(keru-cache-clean clean)",
       "Bash(git commit *)",
       "Bash(git commit)",
       "Bash(git push *)",

@@ -230,6 +230,7 @@ install_helpers() {
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-bot-triage.sh" "$BIN_DIR/keru-bot-triage"
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-branch-cleanup.sh" "$BIN_DIR/keru-branch-cleanup"
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-repo-update.sh" "$BIN_DIR/keru-repo-update"
+  install -m 0755 "$REPO_DIR/scripts/helpers/keru-cache-clean.sh" "$BIN_DIR/keru-cache-clean"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-safe-read.py" "$BIN_DIR/keru-safe-read"
   # Bake this machine's repo path into the installed safe-read copy, so it can
   # recognize a command that runs this repo's own tooling (test harness,
@@ -257,7 +258,7 @@ PY
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-judge-output.py" "$BIN_DIR/keru-judge-output"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-gate-deliverable.py" "$BIN_DIR/keru-gate-deliverable"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-check-drift.py" "$BIN_DIR/keru-check-drift"
-  echo "installed: keru-jira-dev, keru-bot-triage, keru-branch-cleanup, keru-repo-update, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill, keru-check-output, keru-judge-output, keru-gate-deliverable, keru-check-drift in $BIN_DIR"
+  echo "installed: keru-jira-dev, keru-bot-triage, keru-branch-cleanup, keru-repo-update, keru-cache-clean, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill, keru-check-output, keru-judge-output, keru-gate-deliverable, keru-check-drift in $BIN_DIR"
   ensure_on_path
 }
 

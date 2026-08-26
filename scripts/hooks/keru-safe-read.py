@@ -608,6 +608,12 @@ def tokens_are_safe(tokens) -> bool:
         sub = tokens[1] if len(tokens) > 1 else ""
         if sub not in ("audit", "update"):
             return False
+    elif base == "keru-cache-clean":
+        # Read-only only in `audit` mode; `clean` purges caches / prunes Docker,
+        # so defer it (permissions.json also carries the explicit `ask` rule).
+        sub = tokens[1] if len(tokens) > 1 else ""
+        if sub != "audit":
+            return False
     elif base == "bun":
         # bun as a dev tool: `install`/`i`/`ci`/`test`/`build` and typechecking
         # are local-reversible (fetch deps, run tests, bundle to dist/), the same
