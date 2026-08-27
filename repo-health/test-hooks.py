@@ -129,6 +129,34 @@ def test_safe_read():
         ("bun run build", "bun run build"),
         ("bun test", "bun test"),
         ("bun build chained", "cd apps/dbi-docs && bun run build"),
+        # docker/kubectl/aws/helm READ subcommands: inspect/list/logs/describe/get
+        # and friends only read, so they fast-allow without a model call, the same
+        # category as `gh ... view`. Every mutating verb (run/exec/apply/delete/
+        # install/create) is NOT recognized and defers -> in the ask list below.
+        ("docker ps", "docker ps -a"),
+        ("docker images piped", "docker images | grep app"),
+        ("docker logs", "docker logs my-container --tail 100"),
+        ("docker inspect", "docker inspect abc123"),
+        ("docker image ls namespace", "docker image ls"),
+        ("docker compose ps", "docker compose ps"),
+        ("docker -H host ps", "docker -H unix:///var/run/docker.sock ps"),
+        ("kubectl get", "kubectl get pods -n prod -o wide"),
+        ("kubectl describe", "kubectl describe deploy/api -n prod"),
+        ("kubectl logs", "kubectl logs pod/api-xyz -n prod --tail 50"),
+        ("kubectl -n ns get (verb after global flag)", "kubectl -n prod get svc"),
+        ("kubectl auth can-i", "kubectl auth can-i get pods"),
+        ("kubectl config view", "kubectl config view --minify"),
+        ("kubectl top piped", "kubectl top pods -n prod | head"),
+        ("aws describe", "aws ec2 describe-instances --region us-east-1"),
+        ("aws list piped", "aws s3api list-buckets | jq ."),
+        ("aws get-caller-identity", "aws sts get-caller-identity"),
+        ("aws region-before-service", "aws --region us-east-1 ec2 describe-vpcs"),
+        ("aws s3 ls", "aws s3 ls s3://bucket/path/"),
+        ("aws s3api head-object", "aws s3api head-object --bucket b --key k"),
+        ("helm list", "helm list -n prod"),
+        ("helm status", "helm status my-release -n prod"),
+        ("helm get values", "helm get values my-release"),
+        ("helm template local render", "helm template ./chart"),
     ]
     for name, cmd in allow:
         check("safe-read fast-allows: " + name, sr_decision(cmd) == "allow")
@@ -145,7 +173,30 @@ def test_safe_read():
         ("pip install", "pip install requests"),
         ("python script", "python main.py"),
         ("python -m http.server", "python -m http.server"),
-        ("docker ps (unknown to parser)", "docker ps -a"),
+        # docker/kubectl/aws/helm MUTATING verbs are not in the read allowlists,
+        # so they still defer (fail-safe ask). run/exec run arbitrary code; the
+        # per-segment cases prove a read chained before a mutation still defers.
+        ("docker run", "docker run --rm alpine echo hi"),
+        ("docker exec", "docker exec -it web sh"),
+        ("docker rm", "docker rm -f web"),
+        ("docker build", "docker build -t app ."),
+        ("docker compose up", "docker compose up -d"),
+        ("docker read then rm (per-segment)", "docker ps && docker rm -f web"),
+        ("kubectl apply", "kubectl apply -f deploy.yaml"),
+        ("kubectl delete", "kubectl delete pod api-xyz -n prod"),
+        ("kubectl exec", "kubectl exec -it api -- sh"),
+        ("kubectl port-forward", "kubectl port-forward svc/api 8080:80"),
+        ("kubectl auth reconcile", "kubectl auth reconcile -f rbac.yaml"),
+        ("kubectl config use-context", "kubectl config use-context prod"),
+        ("kubectl read then delete (per-segment)", "kubectl get pods && kubectl delete pod x"),
+        ("aws run-instances", "aws ec2 run-instances --image-id ami-123"),
+        ("aws terminate-instances", "aws ec2 terminate-instances --instance-ids i-123"),
+        ("aws s3 rm", "aws s3 rm s3://bucket/key"),
+        ("aws lambda invoke", "aws lambda invoke --function-name f out.json"),
+        ("helm install", "helm install my-release ./chart -n prod"),
+        ("helm upgrade", "helm upgrade my-release ./chart -n prod"),
+        ("helm uninstall", "helm uninstall my-release -n prod"),
+        ("helm repo add", "helm repo add stable https://example.com"),
         # `make build` alone is safe now (a known target), so to keep testing the
         # "unknown command never auto-allowed" guarantee this pairs py_compile with
         # a make target NOT in the safe set (`deploy`), which must still defer.

@@ -244,6 +244,87 @@ GH_READONLY = {
 # mode, so it is handled separately below (`clean` deletes branches and defers).
 KERU_READONLY_HELPERS = {"keru-jira-dev", "keru-bot-triage"}
 
+# docker: read-only subcommands (inspect/list/show a container/image/network/etc.,
+# or print logs/stats/version/info). Matched as an anchored prefix of the
+# positional tokens after global flags, like GH_READONLY, so a two-word namespace
+# form (`docker image ls`, `docker compose ps`) is covered. Every write is NOT
+# here and defers: `run`/`exec` (run arbitrary code), `build`, `cp`, `commit`,
+# `rm`/`rmi`/`kill`/`stop`/`start`/`restart`/`pause`/`rename`/`update`, `push`/
+# `pull`/`login`/`logout`, `prune`, `create`, `save`/`load`/`export`/`import`,
+# `tag`, and `compose up/down/build`. Omitting `exec`/`run` is the important one.
+DOCKER_READONLY = {
+    ("ps",), ("images",), ("logs",), ("inspect",), ("version",), ("info",),
+    ("top",), ("port",), ("history",), ("stats",), ("events",), ("diff",),
+    ("search",),
+    ("image", "ls"), ("image", "inspect"), ("image", "history"),
+    ("container", "ls"), ("container", "inspect"), ("container", "logs"),
+    ("container", "top"), ("container", "stats"), ("container", "diff"),
+    ("container", "port"),
+    ("volume", "ls"), ("volume", "inspect"),
+    ("network", "ls"), ("network", "inspect"),
+    ("context", "ls"), ("context", "inspect"),
+    ("node", "ls"), ("node", "inspect"),
+    ("service", "ls"), ("service", "inspect"), ("service", "logs"),
+    ("system", "df"), ("system", "info"),
+    ("compose", "ps"), ("compose", "logs"), ("compose", "config"),
+    ("compose", "ls"), ("compose", "top"), ("compose", "images"),
+    ("compose", "version"),
+}
+# docker global options that take a SEPARATE value, to skip before the subcommand
+# (`docker -H unix:///... ps`). Booleans (`-D`/`--debug`/`--tls*`) take none.
+DOCKER_VALUE_FLAGS = {"-H", "--host", "--config", "-c", "--context",
+                     "-l", "--log-level"}
+
+# kubectl: read-only verbs (get/describe/logs/top/explain/events/version/
+# cluster-info and the non-mutating auth/config reads). Prefix-matched. Writes
+# (apply/create/delete/edit/patch/replace/scale/rollout/annotate/label/cordon/
+# drain/taint/set), `exec`/`attach`/`port-forward`/`proxy`/`cp`/`run` (execute or
+# tunnel), and the mutating `auth reconcile` / `config set*`/`use-context`/
+# `delete-*`/`rename-context`/`unset` are NOT here and defer.
+KUBECTL_READONLY = {
+    ("get",), ("describe",), ("logs",), ("top",), ("explain",),
+    ("api-resources",), ("api-versions",), ("version",), ("cluster-info",),
+    ("events",),
+    ("auth", "can-i"), ("auth", "whoami"),
+    ("config", "view"), ("config", "current-context"),
+    ("config", "get-contexts"), ("config", "get-clusters"),
+    ("config", "get-users"), ("config", "get-context"),
+}
+KUBECTL_VALUE_FLAGS = {"-n", "--namespace", "--context", "--cluster",
+                      "--kubeconfig", "--user", "-s", "--server", "--token",
+                      "--as", "--as-group", "--request-timeout", "-v", "--v",
+                      "--certificate-authority", "--client-certificate",
+                      "--client-key", "--tls-server-name"}
+
+# aws: read-only iff the OPERATION (second positional, after global flags and the
+# service) begins with describe-/list-/get-/head- (the AWS read-verb convention),
+# or it is an explicit read that breaks the convention (`aws s3 ls`), or `help`.
+# Every mutating op (create-/delete-/put-/update-/modify-/run-/terminate-/start-/
+# stop-/reboot-/invoke/send-/copy-/import-/restore-/attach-/detach-/authorize-/
+# revoke-/associate-/...) lacks those prefixes and defers. No get-/list-/
+# describe-/head- prefixed AWS operation mutates, so the prefix test is safe.
+AWS_READ_OP_RE = re.compile(r"^(describe|list|get|head)(-|$)")
+AWS_READONLY_EXTRA = {("s3", "ls")}
+AWS_VALUE_FLAGS = {"--region", "--profile", "--output", "--endpoint-url",
+                  "--query", "--color", "--ca-bundle", "--cli-read-timeout",
+                  "--cli-connect-timeout", "--cli-binary-format",
+                  "--page-size", "--max-items", "--starting-token"}
+
+# helm: read-only subcommands (list/status/get/history/show/search/version/env,
+# and the local-only `template`/`lint` which render/validate a chart without
+# touching a cluster). Prefix-matched. Writes (install/upgrade/uninstall/delete/
+# rollback/push/package/create/pull, `repo add/update/remove`, `dependency
+# update/build`) are NOT here and defer.
+HELM_READONLY = {
+    ("list",), ("ls",), ("status",), ("get",), ("history",), ("show",),
+    ("version",), ("env",), ("search",), ("template",), ("lint",),
+    ("repo", "list"), ("dependency", "list"), ("plugin", "list"),
+}
+HELM_VALUE_FLAGS = {"-n", "--namespace", "--kube-context", "--kubeconfig",
+                   "--registry-config", "--repository-config",
+                   "--repository-cache", "--kube-apiserver", "--kube-token",
+                   "--kube-as-user"}
+
 # find write actions: unambiguous, only find uses them, so they are dangerous
 # on any command that bears them.
 DANGEROUS_FLAG_TOKENS = {"-exec", "-execdir", "-delete", "-fprint", "-fprintf",
@@ -359,6 +440,32 @@ def _make_is_safe(tokens) -> bool:
     if not targets:
         return False  # bare `make`: default target unknown, defer
     return all(t in MAKE_SAFE_TARGETS for t in targets)
+
+
+def _positional_after_flags(args, value_flags):
+    """Skip leading option flags (consuming a separate value for those in
+    value_flags, unless given as --flag=val) and return the tokens from the first
+    positional onward. Used to find a subcommand/verb that global options may
+    precede (`docker -H ... ps`, `kubectl -n ns get`, `aws --region r ec2 ...`).
+    An unknown leading flag is treated as taking NO value: worst case its real
+    value becomes the leading positional, which then fails the read check and
+    defers, so this can only ever over-defer, never wrongly approve."""
+    i = 0
+    n = len(args)
+    while i < n and args[i].startswith("-"):
+        t = args[i]
+        if "=" in t:            # --flag=value: single token, no separate value
+            i += 1
+        elif t in value_flags:  # --flag value: consume the value too
+            i += 2
+        else:
+            i += 1
+    return args[i:]
+
+
+def _prefix_match(pos, pathset):
+    """True if any tuple in pathset is a prefix of the positional tuple `pos`."""
+    return any(len(pos) >= len(p) and pos[:len(p)] == p for p in pathset)
 
 
 def tokens_are_safe(tokens) -> bool:
@@ -640,6 +747,45 @@ def tokens_are_safe(tokens) -> bool:
         # build/test/lint/codegen target (MAKE_SAFE_TARGETS). A deploy/publish/
         # release target, or a bare `make` (unknown default), defers to the judge.
         if not _make_is_safe(tokens):
+            return False
+    elif base == "docker":
+        # Read-only iff the (namespace) verb prefix is in DOCKER_READONLY. `run`/
+        # `exec`/`build`/`rm`/`push`/`compose up` etc. are absent and defer.
+        pos = tuple(t for t in _positional_after_flags(tokens[1:], DOCKER_VALUE_FLAGS)
+                    if not t.startswith("-"))
+        if not _prefix_match(pos, DOCKER_READONLY):
+            return False
+    elif base == "kubectl":
+        # Read-only iff the verb prefix is in KUBECTL_READONLY. apply/delete/edit/
+        # exec/port-forward/`config use-context` etc. are absent and defer.
+        pos = tuple(t for t in _positional_after_flags(tokens[1:], KUBECTL_VALUE_FLAGS)
+                    if not t.startswith("-"))
+        if not _prefix_match(pos, KUBECTL_READONLY):
+            return False
+    elif base == "helm":
+        # Read-only iff the subcommand prefix is in HELM_READONLY. install/upgrade/
+        # uninstall/rollback/`repo add` etc. are absent and defer.
+        pos = tuple(t for t in _positional_after_flags(tokens[1:], HELM_VALUE_FLAGS)
+                    if not t.startswith("-"))
+        if not _prefix_match(pos, HELM_READONLY):
+            return False
+    elif base == "aws":
+        # `aws <service> <operation>`: read-only iff the operation is describe-/
+        # list-/get-/head-prefixed, an explicit non-conventional read (`aws s3
+        # ls`), or `help`. Every mutating op lacks those prefixes and defers.
+        pos = tuple(t for t in _positional_after_flags(tokens[1:], AWS_VALUE_FLAGS)
+                    if not t.startswith("-"))
+        if not pos:
+            return False  # bare `aws`: defer
+        svc = pos[0]
+        op = pos[1] if len(pos) > 1 else ""
+        if svc == "help" or op == "help":
+            pass
+        elif AWS_READ_OP_RE.match(op):
+            pass
+        elif (svc, op) in AWS_READONLY_EXTRA:
+            pass
+        else:
             return False
     elif base not in READ_ONLY:
         return False
