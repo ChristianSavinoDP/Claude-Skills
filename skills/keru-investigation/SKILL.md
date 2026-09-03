@@ -24,6 +24,7 @@ Read the relevant code and docs directly; track each claim back to evidence you 
 - **Open with the finding,** organized by the question being answered, with real headings a reader can scan (one heading per criterion or finding). No generic intro.
 - **Avoid the "term - definition" pattern;** use proper sentences or sections.
 - **State each conclusion plainly** with its evidence inline or cited, not hedged.
+- **Derive each field's design implications, not just its name and type.** For a schema-shaped subject, a field is not only a label: a per-entry key (e.g. a `country` alongside a group id) changes identity, uniqueness, sort order, and hashing; a narrowed enum changes what the diff can distinguish. Ask "what does this field change about the behavior I am describing?" for each one and state that implication, not only the field's existence. A conclusion that names the fields correctly but never derives what they imply is the half-answer a reviewer sends back.
 - **Sources** in a section at the end.
 
 Form, verification, and placement are not this skill's job: the `keru-writing-docs` skill owns them, so the markdownlint, in-repo-link, em-dash, and claim-verification rules live there, not restated here. This skill decides WHAT the doc says and its structure; writing-docs guarantees it is correct and well-formed and writes it to its home.
