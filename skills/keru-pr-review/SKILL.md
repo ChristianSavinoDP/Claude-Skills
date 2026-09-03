@@ -115,10 +115,12 @@ Comment (paste into the PR):
 This drops the eventual-consistency retry these writes rely on; the Core->Users lag surfaces as `NotFound`, which the transient-only policy will not retry.
 `````
 
-Why: AC #3 asks to confirm no path relies on retrying app-level errors; this one did, and the diff removes it without confirming the window is gone.
+Why: AC 3 asks to confirm no path relies on retrying app-level errors; this one did, and the diff removes it without confirming the window is gone.
 ````
 
 The location+code line and the "Why" are for the user to navigate; only the fenced block after "Comment" is copied to GitHub. That fenced block follows the "Tone" rules above (peer suggesting, not authority declaring). If everything is good, just the verdict line.
+
+**Never reference an acceptance criterion as `AC #3` in anything posted to GitHub** (the fenced Comment block, and the PR-level missing-AC comment above). Inside a GitHub comment a bare `#3` auto-links to issue/PR 3 in the repo and cross-references this PR onto it, so `AC #3` silently links the PR to whatever issue 3 happens to be. Write the criterion without the hash: `AC 3`, `AC-3`, or `acceptance criterion 3`. Reserve `#N` (or the explicit `owner/repo#N`) for when you actually intend to link an issue or PR.
 
 The agents' work (CI status, what ran locally and passed/failed, which findings you verified against the source) is internal working: it goes in a `Why:` line on the relevant finding, or not at all, never as a chat recap or a summary table around the link.
 
