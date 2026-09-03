@@ -131,10 +131,18 @@ hooks_frag.setdefault("SessionStart", []).append({
 home_claude = os.path.expanduser("~/.claude")
 perms_frag.setdefault("allow", []).append("Edit(//%s/**)" % home_claude.lstrip("/"))
 
-# Track what this installer manages, so each run SYNCS (adds new, removes
-# rules/hooks dropped from config) without touching anything added elsewhere.
+# Track which permission RULES this installer manages, so each run SYNCS (adds
+# new, removes rules dropped from config) without touching anything added
+# elsewhere. Permission rules only, deliberately: the marker must never hold a
+# non-empty "hooks" array. Claude Code validates settings by scanning every
+# top-level key it does not recognize for anything hook-shaped, and an object
+# with a non-empty "hooks" array is exactly that shape — it reports
+# "PreToolUse/PermissionRequest hooks are declared outside hooks" as FATAL and
+# stops applying the whole file (permissions, hooks and env with it). Our hooks
+# are synced and removed structurally via is_ours() below, so nothing ever read
+# that list anyway.
 prev = settings.get("_keruManaged", {})
-managed = {"allow": [], "ask": [], "deny": [], "hooks": []}
+managed = {"allow": [], "ask": [], "deny": []}
 
 # Permissions: set defaultMode; sync allow/ask/deny against the managed set.
 perms = settings.setdefault("permissions", {})
@@ -204,10 +212,9 @@ for event in list(hooks.keys()):
     if not hooks[event]:
         del hooks[event]
 
-# Record what we manage (for uninstall); the rebuild above no longer relies on it.
-managed["hooks"] = [[event, json.dumps(h, sort_keys=True)]
-                    for (event, _), hlist in want.items() for h in hlist]
-
+# Record what we manage (for uninstall). Assigned wholesale, so a marker written
+# by an older installer (which also recorded a "hooks" list here, the shape that
+# makes Claude Code reject the settings file) is replaced, not merged into.
 settings["_keruManaged"] = managed
 
 with open(settings_path, "w") as f:

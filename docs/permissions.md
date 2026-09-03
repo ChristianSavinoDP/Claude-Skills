@@ -91,4 +91,6 @@ Fail-open in every branch: any error prints nothing and exits 0, so a broken che
 
 ## Changing it
 
-Edit `config/permissions.json` or `config/hooks.json`, then re-run `scripts/install.sh`. The installer syncs: it tracks the rules and hooks it manages (under a `_keruManaged` marker in the settings), so each run adds what is new and removes what you dropped from config, while leaving rules you added elsewhere untouched (including the playbook's `SessionStart` hook). Changes apply to new sessions.
+Edit `config/permissions.json` or `config/hooks.json`, then re-run `scripts/install.sh`. The installer syncs: it tracks the permission rules it manages (under a `_keruManaged` marker in the settings), so each run adds what is new and removes what you dropped from config, while leaving rules you added elsewhere untouched. Hooks are not tracked in the marker; they are rebuilt from config every run and identified structurally (see [architecture](architecture.md)). Changes apply to new sessions.
+
+The marker holds permission rules only, and must stay that way: Claude Code validates settings by scanning every top-level key it does not recognize for anything hook-shaped, and an object carrying a non-empty `hooks` array is exactly that shape. Putting one there makes it report `PreToolUse/PermissionRequest hooks are declared outside "hooks"` as fatal and stop applying the whole file, permissions and `env` included.

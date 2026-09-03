@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Reverse what scripts/install.sh did: remove the symlinks it created, the
-# permission rules and hooks it managed (tracked under _keruManaged), and the
-# helper scripts it installed. Idempotent.
+# permission rules it managed (tracked under _keruManaged) and the hooks it
+# added (matched structurally, not from the marker), and the helper scripts it
+# installed. Idempotent.
 #
 # Intentionally does NOT touch: secrets (e.g. JIRA_API_TOKEN in settings env),
 # permission rules you added elsewhere, or permissions.defaultMode (its prior
@@ -31,8 +32,9 @@ unlink_repo_symlinks() {
   done
 }
 
-# Remove the permission rules and hooks recorded under _keruManaged, then drop
-# the marker. Leaves everything else (external rules, secrets) untouched.
+# Remove the permission rules recorded under _keruManaged plus our hooks (found
+# structurally by is_ours(), since the marker records rules only), then drop the
+# marker. Leaves everything else (external rules, secrets) untouched.
 unmerge_config() {
   local settings="$CLAUDE_DIR/settings.json"
   [ -f "$settings" ] || return 0
