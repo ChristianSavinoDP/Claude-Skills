@@ -54,22 +54,6 @@ def first_visible_line(msg):
     return ""
 
 
-def check_pr_review(msg):
-    """('ok'|'violation'|'skip', reason)."""
-    first = first_visible_line(msg)
-    if not first:
-        return "skip", ""
-    looks_like_review = bool(REVIEW_HEADING.search(msg)) or bool(VERDICT_HEAD.match(first))
-    if not looks_like_review:
-        return "skip", ""  # not a review delivery (e.g. asking for the PR number)
-    if VERDICT_FULL.match(first):
-        return "ok", ""
-    return ("violation",
-            "the pr-review Output must OPEN with a one-line verdict that is exactly "
-            "`Approve`, `Request changes`, or `Comment` (no parenthetical, no prose "
-            "before or appended). Your first line was: %r" % first[:100])
-
-
 HEADING = re.compile(r"^#{1,6}\s")
 HEADING_ANY = re.compile(r"(?m)^#{1,6}\s")
 # A bold comment header anywhere: `**a.go:55**` or any `**...**` line. Used to
@@ -440,12 +424,11 @@ def _last_assistant_text(records):
     return ""
 
 
-def _skill_from_last_prompt(records):
-    """The deliverable skill named in the current turn: a /keru-X slash command in
-    the last human prompt, or a Skill tool_use after it. Catches a malformed
-    deliverable produced THIS turn (which has no strong fingerprint to match)."""
-    last_user_idx = None
-    last_user_text = ""
+def _last_user_idx(records):
+    """Index of the last genuine human prompt (real text, not a tool_result and not
+    an isMeta injection), or None. Shared by the turn-scoped scanners so they agree
+    on where 'this turn' begins."""
+    idx = None
     for i, r in enumerate(records):
         if r.get("type") != "user" or r.get("isMeta"):
             continue
@@ -453,12 +436,80 @@ def _skill_from_last_prompt(records):
         if isinstance(content, list) and not any(
                 isinstance(c, dict) and c.get("type") == "text" for c in content):
             continue
-        text = _text_of(content)
-        if text.strip():
-            last_user_idx = i
-            last_user_text = text
+        if _text_of(content).strip():
+            idx = i
+    return idx
+
+
+# A deliverable file path: /tmp/keru-deliverable-<skill>[-<id>].md. The <id> is
+# optional and the <skill> may contain hyphens, so the stem is matched against the
+# known CHECKERS keys (below), never split on hyphens.
+DELIVERABLE_PATH_RE = re.compile(r"keru-deliverable-(.+)\.md$")
+
+
+def _skill_from_deliverable_path(path):
+    """Normalized skill name from a /tmp/keru-deliverable-<skill>[-<id>].md path, or
+    None. Matches the stem against the known CHECKERS keys (longest first), so a
+    hyphenated skill name and an optional numeric id are resolved without ambiguity."""
+    if not isinstance(path, str):
+        return None
+    m = DELIVERABLE_PATH_RE.search(path)
+    if not m:
+        return None
+    stem = m.group(1)
+    for skill in sorted(CHECKERS, key=len, reverse=True):
+        if stem == skill or stem.startswith(skill + "-"):
+            return skill
+    return None
+
+
+def _turn_deliverable(records):
+    """If the current turn wrote a file-based deliverable, return (skill, content)
+    with the content read from disk; else (None, '').
+
+    The file-based skills (addressing-pr-comments, pr-review, ...) write the
+    deliverable to /tmp/keru-deliverable-<skill>[-<id>].md and leave only a LINK in
+    chat, so the last assistant message is not the deliverable, the file is. This
+    finds the most recent such Write/Edit in the current turn and reads the final
+    on-disk content, so the checker and the LLM judge see the real deliverable
+    instead of the link. Falls back to (None, '') when nothing matched or the file
+    cannot be read (the caller then uses the inline-message path)."""
+    start = _last_user_idx(records)
+    start = -1 if start is None else start
+    path = None
+    for r in records[start + 1:]:
+        if r.get("type") != "assistant":
+            continue
+        for c in (r.get("message") or {}).get("content", []) or []:
+            if not (isinstance(c, dict) and c.get("type") == "tool_use"
+                    and c.get("name") in ("Write", "Edit")):
+                continue
+            fp = (c.get("input") or {}).get("file_path", "")
+            if _skill_from_deliverable_path(fp):
+                path = fp  # keep the last matching deliverable write this turn
+    if not path:
+        return None, ""
+    skill = _skill_from_deliverable_path(path)
+    if skill not in CHECKERS:
+        return None, ""
+    try:
+        content = open(path, encoding="utf-8").read()
+    except (OSError, ValueError):
+        # OSError: missing/unreadable. ValueError (UnicodeDecodeError): a non-UTF-8
+        # deliverable. Either way fall back to the inline path rather than let the
+        # Stop hook crash on a file it cannot read as text.
+        return None, ""
+    return skill, content
+
+
+def _skill_from_last_prompt(records):
+    """The deliverable skill named in the current turn: a /keru-X slash command in
+    the last human prompt, or a Skill tool_use after it. Catches a malformed
+    deliverable produced THIS turn (which has no strong fingerprint to match)."""
+    last_user_idx = _last_user_idx(records)
     if last_user_idx is None:
         return None
+    last_user_text = _text_of((records[last_user_idx].get("message") or {}).get("content"))
     candidates = set()
     for m in re.finditer(r"/(keru-[a-z-]+)", last_user_text):
         candidates.add(_norm(m.group(1)))

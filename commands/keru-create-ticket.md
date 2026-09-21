@@ -33,15 +33,11 @@ Verified against the live config and a real ticket; do not assume other values w
      {-P <EPIC-KEY> | -l BAU} --no-input
    ```
    No `-C` here: it is rejected (see the Service note). `jira issue create` is held at `ask`, so this prompts; that prompt is the second gate on top of your confirmation. `--no-input` stops it blocking on an interactive prompt for a field you did not pass. Read back the created key from the output; never claim a key you did not see.
-6. **Apply the component(s) by id.** Resolve each service name to its numeric component id: the ids for the common components are cached in memory (`jira-dbi-component-ids`, read it first; the ids are instance-specific so they live there, not in this public repo), else read them from the type's createmeta (`GET /rest/api/3/issue/createmeta/DBI/issuetypes/<typeId>`, `components.allowedValues[]`). Either way confirm the id is not archived and belongs to `DBI` before using it; the cache can be stale. Then set them on the new key in one call. Read `server` and `login` from the `jira` config (`~/.config/.jira/.config.yml`) rather than hardcoding them; the token is `$JIRA_API_TOKEN`:
+6. **Apply the component(s) by id.** Resolve each service name to its numeric component id: the ids for the common components are cached in memory (`jira-dbi-component-ids`, read it first; the ids are instance-specific so they live there, not in this public repo), else read them from the type's createmeta (`GET /rest/api/3/issue/createmeta/DBI/issuetypes/<typeId>`, `components.allowedValues[]`). Either way confirm the id is not archived and belongs to `DBI` before using it; the cache can be stale. Then set them on the new key in one call with the `keru-jira-set-components` write helper, passing the key and the numeric ids. The helper reads `server` and `login` from the `jira` config (`~/.config/.jira/.config.yml`) and builds the auth header internally from `$JIRA_API_TOKEN`, so the token is never placed on the command line (a `curl -u "$LOGIN:$TOKEN"` would expose it to any local user via `ps`/`/proc`):
    ```bash
-   curl -s -o /dev/null -w "%{http_code}" \
-     -u "$JIRA_LOGIN:$JIRA_API_TOKEN" -X PUT \
-     "$JIRA_SERVER/rest/api/2/issue/<KEY>" \
-     -H "Content-Type: application/json" \
-     -d '{"fields":{"components":[{"id":"<id1>"},{"id":"<id2>"}]}}'
+   keru-jira-set-components <KEY> <id1> [<id2> ...]
    ```
-   Expect `204`. This is a remote state change on a ticket that already exists, so it is a follow-up edit, not a bypass of the create gate. Then read the ticket back and confirm every intended component landed (Playbook "verify"); do not assume the `204` placed the right ids.
+   It PUTs only the components field and expects `204`, printing the result. This is a remote state change on a ticket that already exists, so it is a follow-up edit, not a bypass of the create gate, and is held at `ask` in `config/permissions.json` (it is deliberately not auto-approved). Then read the ticket back and confirm every intended component landed (Playbook "verify"); do not assume the `204` placed the right ids.
 
 ## Several tickets (one at a time)
 

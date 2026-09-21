@@ -43,11 +43,59 @@ SKILLS = [
                        "investigation skill", "skill de investigacion"]),
     ("keru-gather-context", ["gather-context", "gather context",
                         "context skill", "skill de contexto"]),
+    # The remaining task skills. Each is named by a phrase that genuinely
+    # identifies it; bare generic words ("ci", "debug", "branch", "repo", "bot",
+    # "audit", "datadog") are deliberately excluded, since they match casual
+    # mentions and the USE_SKILL "use ... skill" guard alone cannot disambiguate
+    # them (same reasoning as the bare "review"/"revisar" exclusion above).
+    ("keru-responding-to-ci", ["responding-to-ci", "responding to ci", "respond to ci",
+                          "responder ci", "responder al ci", "arreglar ci", "fix ci",
+                          "ci skill", "skill de ci", "skill del ci"]),
+    ("keru-debugging", ["debugging skill", "debug skill", "skill de debugging",
+                   "skill de debug", "debuggear", "depurar"]),
+    ("keru-bot-triage", ["bot-triage", "bot triage", "triage bots", "triage de bots",
+                    "triage de dependabot", "bot skill", "skill de bot triage",
+                    "skill de bots"]),
+    ("keru-datadog-audit", ["datadog-audit", "datadog audit", "auditar datadog",
+                       "audit datadog", "datadog skill", "skill de datadog"]),
+    ("keru-branch-audit", ["branch-audit", "branch audit", "auditar branches",
+                      "auditar ramas", "audit branches", "branch audit skill",
+                      "skill de branch audit"]),
+    ("keru-repo-audit", ["repo-audit", "repo audit", "auditar repos",
+                    "auditar repositorios", "audit repos", "repo audit skill",
+                    "skill de repo audit"]),
+    ("keru-usage-audit", ["usage-audit", "usage audit", "auditar usage",
+                     "auditar gasto", "auditar consumo", "usage skill",
+                     "skill de usage", "skill de gasto", "skill de consumo"]),
 ]
 
 # The user is explicitly asking to USE a skill only if the prompt has a "use" verb
 # near the word "skill". This keeps it to direct instructions, not casual mentions.
 USE_SKILL = re.compile(r"(use|uses|using|us[aáeo]\w*|invoc\w*|corr[eé]\w*|run)\b[^.\n]{0,40}\bskill\b", re.I)
+
+# A negator just before the matched skill phrase flips "use the X skill" into "do
+# NOT use it". Demanding the skill then would be exactly wrong (the Stop hook would
+# order Claude to invoke the skill the user forbade), so a negated match is treated
+# as no request. English (not/never/don't/without/no) and Spanish (no/sin/nunca/jamas).
+NEG_WINDOW = 30
+NEGATORS = re.compile(r"\b(?:not|never|don'?t|without|no|sin|nunca|jam[aá]s)\b", re.I)
+
+
+def _phrase_negated(low, idx):
+    """True if a negator genuinely negates the skill request: it sits within the
+    short window of text before position idx (the start of a matched skill phrase)
+    AND no clause boundary (comma or semicolon) separates it from the phrase. So
+    'do not use the writing-code skill' and 'no uses el skill de codigo' are
+    negated, but a non-negating lead-in like 'no problem, use the pr-review skill'
+    or 'there's no way around it, use the debugging skill' is not: the comma breaks
+    the negation, so the bare 'no' (needed for Spanish) no longer suppresses a real
+    English request that merely happens to contain one nearby."""
+    window = low[max(0, idx - NEG_WINDOW):idx]
+    for m in NEGATORS.finditer(window):
+        between = window[m.end():]
+        if "," not in between and ";" not in between:
+            return True
+    return False
 
 
 def load_turn(transcript_path):
@@ -155,8 +203,17 @@ def requested_skill(text):
     low = text.lower()
     for skill, phrases in SKILLS:
         for p in phrases:
-            if p in low:
-                return skill
+            start = 0
+            while True:
+                idx = low.find(p, start)
+                if idx < 0:
+                    break
+                # Only a non-negated occurrence counts as a request. Scan every
+                # occurrence of the phrase: a later un-negated mention still asks
+                # for the skill even if an earlier one was negated.
+                if not _phrase_negated(low, idx):
+                    return skill
+                start = idx + 1
     return None
 
 

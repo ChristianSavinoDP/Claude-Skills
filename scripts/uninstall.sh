@@ -89,19 +89,19 @@ for key in ("allow", "ask", "deny"):
         del perms[key]
 
 # Hooks: remove OURS structurally, not just what the marker lists, so a stale or
-# lost marker still leaves a clean settings. Ours = a command at
-# ~/.local/bin/keru-*, any agent-type hook, the playbook SessionStart `cat`, or a
-# null/malformed leftover. Anything else is the user's and is preserved.
+# lost marker still leaves a clean settings. Ours is identified ONLY by signature:
+# a command at ~/.local/bin/keru-*, the playbook SessionStart `cat .../playbook/
+# PLAYBOOK.md`, or a null/malformed leftover. We do NOT claim ownership by hook
+# type: this repo ships zero agent-type hooks, so a type=="agent" test could only
+# match a hook the user or a plugin authored, and removing it would violate the
+# preservation contract. This mirrors install.sh's is_ours exactly. Anything else
+# is the user's and is preserved.
 def is_ours(h):
     if not isinstance(h, dict):
         return True
-    if h.get("type") == "agent":
-        return True
     cmd = h.get("command", "")
-    if isinstance(cmd, str) and ("/.local/bin/keru-" in cmd
-                                 or "/playbook/PLAYBOOK.md" in cmd):
-        return True
-    return False
+    return isinstance(cmd, str) and ("/.local/bin/keru-" in cmd
+                                     or "/playbook/PLAYBOOK.md" in cmd)
 
 hooks = settings.get("hooks", {})
 for event in list(hooks.keys()):
@@ -121,9 +121,17 @@ print("removed: %d permission rule(s) and our hooks" % removed if removed
 PY
 }
 
-# Remove helper scripts the installer placed on PATH.
+# Remove helper scripts the installer placed on PATH. Enumerate exactly the
+# names install.sh installs, derived from this repo's own helper/hook scripts
+# (basename minus extension, mirroring install_helpers), never a bare keru-* glob:
+# keru- is a short, common prefix, so `rm ~/.local/bin/keru-*` could delete unrelated
+# tools this installer never created.
 remove_helpers() {
-  for h in "$BIN_DIR"/keru-*; do
+  local src name h
+  for src in "$REPO_DIR"/scripts/helpers/keru-*.sh "$REPO_DIR"/scripts/hooks/keru-*.py; do
+    [ -e "$src" ] || continue
+    name="$(basename "$src")"; name="${name%.sh}"; name="${name%.py}"
+    h="$BIN_DIR/$name"
     [ -e "$h" ] || continue
     rm "$h"; echo "removed: $h"
   done

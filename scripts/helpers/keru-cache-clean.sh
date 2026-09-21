@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Audit (or purge) the regenerable dev caches, old tool versions, and unused
-# Docker data that pile up on a dev machine. Every target here rebuilds or
-# re-downloads on next use, so nothing removed is unrecoverable: the cost is
-# time, not data.
+# Docker data that pile up on a dev machine. Every target removed by default
+# rebuilds or re-downloads on next use, so nothing is unrecoverable: the cost is
+# time, not data. The one exception is opt-in, never the default: --docker=all
+# also prunes unused Docker volumes, which can hold non-regenerable data such as
+# a local dev database.
 #
 # scripts/hooks/keru-safe-read.py auto-approves `audit` (read-only) but not
 # `clean`, keying on the mode being positional arg 1. Keep `audit` read-only and
@@ -12,12 +14,13 @@
 # Usage: keru-cache-clean <mode> [--docker=all|prune|none]
 #   mode = audit -> read-only: report each target's reclaimable size, delete nothing
 #   mode = clean -> purge every target below
-#   --docker (clean/audit): all  = `docker system prune -a --volumes -f` (default:
-#                                   also unused tagged images + volumes; volumes
-#                                   may hold dev DB data)
-#                           prune = `docker system prune -f` (stopped containers,
-#                                   dangling images, build cache; keeps volumes and
-#                                   tagged images)
+#   --docker (clean/audit): all  = `docker system prune -a --volumes -f` (also
+#                                   unused tagged images + volumes; volumes may
+#                                   hold dev DB data, so this is opt-in, NOT the
+#                                   default)
+#                           prune = `docker system prune -f` (DEFAULT: stopped
+#                                   containers, dangling images, build cache; keeps
+#                                   volumes and tagged images)
 #                           none  = leave Docker alone
 #
 # DELIBERATELY NOT touched: browser caches (Chrome/Google/Firefox/Safari) and
@@ -36,7 +39,8 @@ case "$MODE" in
   *) echo "usage: keru-cache-clean <audit|clean> [--docker=all|prune|none]" >&2; exit 2 ;;
 esac
 
-DOCKER_LEVEL="all"  # aggressive by default: this tool exists to reclaim everything
+DOCKER_LEVEL="prune"  # conservative default: keeps volumes (may hold dev DB data)
+                      # and tagged images; pass --docker=all to also remove those
 for arg in "${@:2}"; do
   case "$arg" in
     --docker=all|--docker=prune|--docker=none) DOCKER_LEVEL="${arg#--docker=}" ;;

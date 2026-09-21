@@ -136,7 +136,7 @@ perms_frag.setdefault("allow", []).append("Edit(//%s/**)" % home_claude.lstrip("
 # elsewhere. Permission rules only, deliberately: the marker must never hold a
 # non-empty "hooks" array. Claude Code validates settings by scanning every
 # top-level key it does not recognize for anything hook-shaped, and an object
-# with a non-empty "hooks" array is exactly that shape — it reports
+# with a non-empty "hooks" array is exactly that shape; it reports
 # "PreToolUse/PermissionRequest hooks are declared outside hooks" as FATAL and
 # stops applying the whole file (permissions, hooks and env with it). Our hooks
 # are synced and removed structurally via is_ours() below, so nothing ever read
@@ -167,18 +167,22 @@ for key in ("allow", "ask", "deny"):
 # than diff against the previous _keruManaged marker (fragile: if the marker is
 # lost or stale, old hooks orphan and pile up, and a half-merge can leave nulls),
 # we identify OUR hooks structurally and replace them wholesale with what the
-# config currently wants. A hook is "ours" if it is a command pointing at
-# ~/.local/bin/keru-* or any agent-type hook (all our agent hooks are ours; we do
-# not author other agent hooks). Everything else in a group is preserved.
+# config currently wants. A hook is "ours" ONLY by signature: a command pointing
+# at ~/.local/bin/keru-*, or the playbook SessionStart `cat .../playbook/PLAYBOOK.md`
+# (its command is injected above, not routed through ~/.local/bin). We do NOT
+# claim ownership by hook type: this repo ships zero agent-type hooks, so a
+# type=="agent" test could only ever match a hook the user or a plugin authored,
+# and stripping that would corrupt their config. Everything else is preserved.
+# Recognizing the playbook `cat` by signature (not just dict-equality dedup) also
+# means a stale copy from a moved repo path is stripped, not orphaned.
 hooks = settings.setdefault("hooks", {})
 
 def is_ours(h):
     if not isinstance(h, dict):
         return True  # null / malformed leftover: drop it
-    if h.get("type") == "agent":
-        return True
     cmd = h.get("command", "")
-    return isinstance(cmd, str) and "/.local/bin/keru-" in cmd
+    return isinstance(cmd, str) and ("/.local/bin/keru-" in cmd
+                                     or "/playbook/PLAYBOOK.md" in cmd)
 
 # What the config wants, grouped by (event, matcher).
 want = {}  # (event, matcher) -> list of hook dicts, in order
@@ -234,10 +238,14 @@ install_helpers() {
   # by config/hooks.json) live in scripts/hooks/. Both install under the same
   # bare names on PATH, so the rename is invisible to settings.json and skills.
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-jira-dev.sh" "$BIN_DIR/keru-jira-dev"
+  install -m 0755 "$REPO_DIR/scripts/helpers/keru-jira-set-components.sh" "$BIN_DIR/keru-jira-set-components"
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-bot-triage.sh" "$BIN_DIR/keru-bot-triage"
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-branch-cleanup.sh" "$BIN_DIR/keru-branch-cleanup"
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-repo-update.sh" "$BIN_DIR/keru-repo-update"
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-cache-clean.sh" "$BIN_DIR/keru-cache-clean"
+  install -m 0755 "$REPO_DIR/scripts/helpers/keru-usage.sh" "$BIN_DIR/keru-usage"
+  install -m 0755 "$REPO_DIR/scripts/helpers/keru-context-snapshot.sh" "$BIN_DIR/keru-context-snapshot"
+  install -m 0755 "$REPO_DIR/scripts/helpers/keru-session-brief.sh" "$BIN_DIR/keru-session-brief"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-safe-read.py" "$BIN_DIR/keru-safe-read"
   # Bake this machine's repo path into the installed safe-read copy, so it can
   # recognize a command that runs this repo's own tooling (test harness,
@@ -246,7 +254,7 @@ install_helpers() {
   # time by replacing the source's placeholder. python3 is already a hard
   # dependency of the hooks themselves; if it is somehow absent the placeholder
   # simply stays and safe-read falls back to locating the repo from its own path
-  # (harmless — that path just won't match for the installed copy).
+  # (harmless, that path just won't match for the installed copy).
   if command -v python3 >/dev/null 2>&1; then
     python3 - "$BIN_DIR/keru-safe-read" "$REPO_DIR" <<'PY'
 import sys
@@ -265,7 +273,7 @@ PY
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-judge-output.py" "$BIN_DIR/keru-judge-output"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-gate-deliverable.py" "$BIN_DIR/keru-gate-deliverable"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-check-drift.py" "$BIN_DIR/keru-check-drift"
-  echo "installed: keru-jira-dev, keru-bot-triage, keru-branch-cleanup, keru-repo-update, keru-cache-clean, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill, keru-check-output, keru-judge-output, keru-gate-deliverable, keru-check-drift in $BIN_DIR"
+  echo "installed: keru-jira-dev, keru-jira-set-components, keru-bot-triage, keru-branch-cleanup, keru-repo-update, keru-cache-clean, keru-usage, keru-context-snapshot, keru-session-brief, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill, keru-check-output, keru-judge-output, keru-gate-deliverable, keru-check-drift in $BIN_DIR"
   ensure_on_path
 }
 

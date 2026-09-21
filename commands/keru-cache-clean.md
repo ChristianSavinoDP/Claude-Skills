@@ -13,7 +13,7 @@ The helper purges a curated set, and only that:
 
 - **Package-manager caches** via each tool's own command: `brew cleanup -s` (old versions + downloads), `npm cache clean --force`, `go clean -cache`, `go clean -modcache`, `pip3 cache purge`.
 - **Dev-tool caches**: `goimports`, `gopls`, `golangci-lint`, `node-gyp` (under `~/Library/Caches` on macOS, `~/.cache` on Linux).
-- **Docker** (only if the daemon is running): `--docker=all` (default) runs `docker system prune -a --volumes -f`, which also removes unused tagged images and volumes (volumes may hold dev DB data); `--docker=prune` keeps volumes and tagged images; `--docker=none` skips Docker.
+- **Docker** (only if the daemon is running): `--docker=prune` (default) runs `docker system prune -f`, keeping volumes and tagged images; `--docker=all` runs `docker system prune -a --volumes -f`, which also removes unused tagged images and volumes (volumes may hold dev DB data, so it is opt-in, never the default); `--docker=none` skips Docker.
 
 **Never touched:** browser caches (Chrome/Google/Firefox/Safari) and OS/app caches under `~/Library/Caches`. This is a dev-cache cleaner, not a blanket wipe.
 

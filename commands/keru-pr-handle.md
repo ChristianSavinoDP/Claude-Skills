@@ -9,6 +9,8 @@ Drive a PR from the author's side: open it if it does not exist, or move it forw
 
 Run it from the repo that holds the work (the current clone), not this repo; `gh` resolves the target repo from the remote. This command owns only two genuinely new actions, creating and merging; for everything an existing skill already does (drafting the body, resolving comments, getting CI green, reviewing), it delegates to that skill rather than reimplementing it.
 
+**No tool attribution.** Nothing this command creates carries a "Generated with Claude Code" line or a `Co-Authored-By: Claude` trailer: not the PR body, not the squash-merge commit message. Strip any such mark regardless of a default that would add one.
+
 ## Detect the state first
 
 Check whether a PR already exists for the current branch, and branch on it:

@@ -51,8 +51,9 @@ Each skill is also its slash command (type the name, or just describe the task a
 | `keru-responding-to-ci` | get a PR's failing CI green | triages each red check, then calls debugging/writing-code; read-only on CI, never reruns or pushes |
 | `keru-branch-audit` | list stale local branches (gone upstream) across the projects root or one named repo | read-only; uses the `keru-branch-cleanup` helper |
 | `keru-repo-audit` | show what switching to default + fast-forwarding would do, per repo | read-only; uses the `keru-repo-update` helper |
+| `keru-usage-audit` | report token spend and estimated cost per month/day/session/project, and what drives it | read-only; uses the `keru-usage` helper, prices recorded tokens, calls no model |
 
-The read-only audit halves (`keru-branch-audit`, `keru-repo-audit`) are skills: they only inspect, so triggering on a matching request is fine. Their state-changing counterparts are commands (below).
+The read-only audit halves (`keru-branch-audit`, `keru-repo-audit`) are skills: they only inspect, so triggering on a matching request is fine. Their state-changing counterparts are commands (below). `keru-usage-audit` is read-only with no counterpart: there is nothing to change, only spend to read back.
 
 ## Commands
 

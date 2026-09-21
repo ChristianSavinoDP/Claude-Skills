@@ -45,7 +45,7 @@ _INTERPRETERS = {"python", "python3", "py", "bash", "sh", "zsh", "node",
 def _looks_like_repo(d) -> bool:
     """True if d is the Claude-Skills repo root (contains this very hook and the
     playbook). This guards the __file__ fallback: the installed copy lives in
-    ~/.local/bin, whose grandparent is $HOME, not the repo — so it fails this
+    ~/.local/bin, whose grandparent is $HOME, not the repo, so it fails this
     check and defers to the baked path rather than trusting all of $HOME."""
     return bool(d) and os.path.isfile(
         os.path.join(d, "scripts", "hooks", "keru-safe-read.py")
@@ -74,7 +74,7 @@ _CWD = None  # dir relative paths resolve against; set from the payload in main(
 
 
 def _executes_repo_file(tokens) -> bool:
-    """True if this segment runs a file INSIDE this repo — either the program
+    """True if this segment runs a file INSIDE this repo: either the program
     itself is a repo path (`./scripts/install.sh`, `repo-health/repo-health.sh`)
     or it is a known interpreter whose script argument is a repo file
     (`python3 repo-health/test-hooks.py`, `bash scripts/uninstall.sh`). Relative
@@ -139,7 +139,7 @@ DEFER_KW = {"case", "esac", "function"}      # too messy to parse: defer
 # `config`/`remote` (mutate config). `fetch` is here: it is a network read that
 # only writes remote-tracking refs and FETCH_HEAD under local `.git` (reversible
 # via reflog, never touches the working tree or remote state), the same
-# local-reversible category as the rest — so `git -C <clone> fetch origin
+# local-reversible category as the rest, so `git -C <clone> fetch origin
 # pull/<n>/head` (used by pr-review / gather-context) is approved deterministically
 # instead of falling to the non-deterministic model judge. `checkout`/`switch` are
 # here but the discard forms (`checkout -- <file>`, `checkout .`) are rejected below.
@@ -242,7 +242,14 @@ GH_READONLY = {
 # Jira's dev-status endpoint, keru-bot-triage does only gh reads (no merges or
 # comments). keru-branch-cleanup is NOT here: it is read-only only in `audit`
 # mode, so it is handled separately below (`clean` deletes branches and defers).
-KERU_READONLY_HELPERS = {"keru-jira-dev", "keru-bot-triage"}
+KERU_READONLY_HELPERS = {"keru-jira-dev", "keru-bot-triage", "keru-usage",
+                         # keru-context-snapshot only reads Jira; its `write` mode
+                         # creates exactly one file, /tmp/keru-context-<KEY>.md, so
+                         # every mode is local-reversible with a bounded path.
+                         "keru-context-snapshot",
+                         # keru-session-brief only reads transcripts and prints;
+                         # it writes nothing at all.
+                         "keru-session-brief"}
 
 # docker: read-only subcommands (inspect/list/show a container/image/network/etc.,
 # or print logs/stats/version/info). Matched as an anchored prefix of the

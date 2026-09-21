@@ -176,9 +176,17 @@ def main():
     if not records:
         return
     # Cheap gate, two stages, before spending any model call:
-    # 1. Which deliverable skill governs this turn (slash command / Skill tool /
-    #    fingerprint). No skill => chat, exit.
-    skill, msg = _co.governing_skill_and_message(records)
+    # 1. Which deliverable skill governs this turn, and its ACTUAL content. Prefer
+    #    the file-based deliverable: the file skills write /tmp/keru-deliverable-*.md
+    #    and leave only a LINK in chat, so judging the last assistant message would
+    #    judge the link, not the deliverable (its content would never be seen).
+    #    _turn_deliverable reads that file's content from disk; fall back to the
+    #    inline message (a deliverable posted directly in chat, or an older keru-check-
+    #    output copy without the helper). No skill => chat, exit.
+    _td = getattr(_co, "_turn_deliverable", None)
+    skill, msg = _td(records) if _td else (None, "")
+    if not skill or not msg:
+        skill, msg = _co.governing_skill_and_message(records)
     if not skill or not msg:
         return
     # Only judge the skills whose deliverable benefits from an LLM review of tone/

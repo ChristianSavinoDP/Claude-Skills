@@ -25,6 +25,7 @@ CHECK_OUTPUT = os.path.join(HOOKS, "keru-check-output.py")
 JUDGE_OUTPUT = os.path.join(HOOKS, "keru-judge-output.py")
 GATE = os.path.join(HOOKS, "keru-gate-deliverable.py")
 CHECK_DRIFT = os.path.join(HOOKS, "keru-check-drift.py")
+BLOCK_INLINE = os.path.join(HOOKS, "keru-block-inline-interp.py")
 
 results = []
 
@@ -340,20 +341,58 @@ def test_require_skill():
           not rs_block("Stop hook feedback:\nYou were explicitly asked to use "
                        "the `writing-code` skill this turn", []))
 
-    # Every skill id in the hook's SKILLS table must exist on disk.
-    check("hook skill ids match skills/ on disk", _skill_ids_exist())
+    # A newly-added skill is genuinely enforced (regression for the 6 that were
+    # missing from the map): a prose "use the debugging skill" not invoked blocks.
+    check("added skill (debugging) is enforced -> blocks once",
+          rs_block("please use the debugging skill for this", []))
+
+    # Negation: a FORBIDDEN skill must NOT be demanded. "do not use the X skill"
+    # matches the USE_SKILL verb+skill shape, but a negator precedes the phrase, so
+    # the hook must return None (no block) rather than ordering the very skill the
+    # user prohibited. Both languages.
+    check("EN negated request -> no block",
+          not rs_block("do not use the writing-code skill here", []))
+    check("ES negated request -> no block",
+          not rs_block("no uses el skill de codigo", []))
+    # The scan-every-occurrence loop: a later un-negated mention still asks for the
+    # skill even after an earlier negated one, and an all-negated string never does.
+    # Two occurrences of the SAME phrase pin the loop from both sides; a single
+    # occurrence cannot (it would return on that one match and never test the scan,
+    # and would pass or fail on the incidental distance of a negator from the window
+    # edge rather than on the loop's logic).
+    check("negated then affirmed (two occurrences) -> blocks on the affirmed one",
+          rs_block("do not use the debugging skill; on reflection, do use the "
+                   "debugging skill", []))
+    check("both occurrences negated -> no block",
+          not rs_block("do not use the debugging skill and, again, do not use "
+                       "the debugging skill", []))
+    # A non-negating "no" lead-in ("no problem", "there's no way") must NOT suppress
+    # a genuine request: a clause boundary (comma/semicolon) between the "no" and the
+    # phrase means it is not negating it. Both must still block.
+    check("non-negating 'no problem' lead-in -> still blocks",
+          rs_block("no problem, use the pr-review skill", []))
+    check("non-negating 'there's no way' lead-in -> still blocks",
+          rs_block("there's no way around it, use the debugging skill", []))
+
+    # Every skill id in the hook's SKILLS table must exist on disk, and vice versa.
+    check("hook skill ids match skills/ on disk (both ways)", _skill_ids_exist())
 
 
 def _skill_ids_exist():
-    """The canonical ids in keru-require-skill's SKILLS must be real skill dirs."""
+    """keru-require-skill's SKILLS table and the skill dirs on disk must match
+    EXACTLY, both ways: every id maps to a real skill dir (no typo or stale id),
+    AND every skill dir appears in the table (no skill silently left unguarded). A
+    one-directional check let a disk skill missing from the map pass unnoticed,
+    which is precisely how 6 skills went unenforced while docs advertised the
+    safeguard."""
     import re
     src = open(REQUIRE_SKILL, encoding="utf-8").read()
     # Grab the first string in each ("id", [..]) tuple of the SKILLS list.
-    ids = re.findall(r'\(\s*"(keru-[a-z-]+)"\s*,\s*\[', src)
+    map_ids = set(re.findall(r'\(\s*"(keru-[a-z-]+)"\s*,\s*\[', src))
     skills_dir = os.path.join(REPO, "skills")
-    if not ids:
-        return False
-    return all(os.path.isdir(os.path.join(skills_dir, i)) for i in ids)
+    disk_ids = {d for d in os.listdir(skills_dir)
+                if d.startswith("keru-") and os.path.isdir(os.path.join(skills_dir, d))}
+    return bool(map_ids) and map_ids == disk_ids
 
 
 # --- keru-check-output -------------------------------------------------------
@@ -924,6 +963,165 @@ def test_check_drift():
         shutil.rmtree(base, ignore_errors=True)
 
 
+# --- keru-block-inline-interp ------------------------------------------------
+
+def bii_denies(cmd):
+    """True if the inline-interpreter block hook denies this Bash command."""
+    payload = {"tool_name": "Bash", "tool_input": {"command": cmd}}
+    out = subprocess.run([sys.executable, BLOCK_INLINE], input=json.dumps(payload),
+                         capture_output=True, text=True).stdout.strip()
+    if not out:
+        return False
+    try:
+        return json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    except Exception:
+        return False
+
+
+def test_block_inline_interp():
+    # DENY: genuine inline code via -c / -e and their variants. The value-taking
+    # options (-W/-X) and a leading non-value option (-B) must not hide a later -c;
+    # a second interpreter after a pipe or && is caught on its own turn; a path-
+    # prefixed interpreter (.venv/bin/python) resolves by basename; deno/bun too.
+    deny = [
+        ("python3 -c", "python3 -c 'import os; print(1)'"),
+        ("python -c attached", "python -c'print(1)'"),
+        ("node -e", "node -e 'console.log(1)'"),
+        ("ruby -e", "ruby -e 'puts 1'"),
+        ("perl -e", "perl -e 'print 1'"),
+        ("deno -e", "deno -e 'console.log(1)'"),
+        ("bun -e", "bun -e 'console.log(1)'"),
+        ("python cluster -Ic", "python3 -Ic 'print(1)'"),
+        ("python -W ignore then -c", "python3 -W ignore -c 'print(1)'"),
+        ("python -X importtime then -c", "python3 -X importtime -c 'x'"),
+        ("python -B then -c", "python3 -B -c 'x'"),
+        ("path-prefixed python -c", ".venv/bin/python -c 'print(1)'"),
+        ("second interp after pipe", "cat x | python3 -c 'import sys'"),
+        ("second interp after &&", "cd x && python3 -c 'import sys'"),
+    ]
+    for name, cmd in deny:
+        check("inline-interp denies: " + name, bii_denies(cmd))
+
+    # DEFER (no deny): running a SCRIPT or MODULE whose own args include -c/-e is
+    # explicitly allowed (the documented guarantee), and long options like -config
+    # must not be misread as -c. Plain script runs defer too.
+    allow = [
+        ("script with -c arg", "python3 tool.py -c config.yml"),
+        ("module -m with -c arg", "python -m pytest -c setup.cfg"),
+        ("node script with -e arg", "node build.js -e production"),
+        ("plain python script", "python3 app.py"),
+        ("plain node script", "node server.js"),
+        ("-W value then script then its -c", "python3 -W ignore app.py -c cfg"),
+        ("long option -config not -c", "python3 -config value"),
+        ("non-interpreter -e flag", "grep -e foo file"),
+        # Regression: the cluster heuristic is python-only, so a perl/ruby attached-
+        # value option whose value ends in the flag letter (-e) is NOT a cluster.
+        ("perl -M module load not inline", "perl -Mautodie script.pl"),
+        ("perl -M feature not inline", "perl -Mfeature script.pl"),
+        ("ruby -I include dir not inline", "ruby -Icode app.rb"),
+    ]
+    for name, cmd in allow:
+        check("inline-interp defers: " + name, not bii_denies(cmd))
+
+
+# --- keru-check-output: file-based deliverable resolution --------------------
+
+def test_turn_deliverable():
+    """Regression: a file-based deliverable (a Write to /tmp/keru-deliverable-*.md,
+    with only a LINK left in chat) must resolve to the FILE's content, so the LLM
+    judge reviews the real deliverable instead of the link. Exercises
+    keru-check-output's _turn_deliverable / _skill_from_deliverable_path directly."""
+    import importlib.util as _ilu
+    _s = _ilu.spec_from_file_location("cco_td", CHECK_OUTPUT)
+    _m = _ilu.module_from_spec(_s); _s.loader.exec_module(_m)
+
+    # Duplicate check_pr_review removed: it must now be defined exactly once.
+    src = open(CHECK_OUTPUT, encoding="utf-8").read()
+    check("check-output: check_pr_review defined once (no duplicate)",
+          src.count("def check_pr_review(") == 1)
+
+    # Path resolution: hyphenated skill name + optional id both resolve; a
+    # non-deliverable path resolves to None.
+    check("deliverable-path: addressing-pr-comments with id",
+          _m._skill_from_deliverable_path("/tmp/keru-deliverable-addressing-pr-comments-1.md")
+          == "addressing-pr-comments")
+    check("deliverable-path: pr-review no id",
+          _m._skill_from_deliverable_path("/tmp/keru-deliverable-pr-review.md") == "pr-review")
+    check("deliverable-path: non-deliverable -> None",
+          _m._skill_from_deliverable_path("/tmp/notes.md") is None)
+
+    tmpd = tempfile.mkdtemp()
+    dpath = os.path.join(tmpd, "keru-deliverable-pr-review-5.md")
+    body = "Verdict: Approve\n\n### Nits\n\n`a.go:1`\n\nWhy: looks fine.\n"
+    with open(dpath, "w", encoding="utf-8") as f:
+        f.write(body)
+    recs = [
+        {"type": "user", "message": {"content":
+            "<command-name>/keru-pr-review</command-name>\nreview PR 5"}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Write",
+             "input": {"file_path": dpath, "content": body}}]}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "text", "text": "Done. Review at %s" % dpath}]}},
+    ]
+    skill, content = _m._turn_deliverable(recs)
+    check("turn-deliverable: resolves skill from the Write record", skill == "pr-review")
+    check("turn-deliverable: returns the FILE content, not the link",
+          content.strip().startswith("Verdict: Approve"))
+    # The checker run on the file content passes (so the judge would proceed),
+    # whereas run on the link text it would 'skip' (the old, broken behavior).
+    check("turn-deliverable: file content passes the pr-review checker",
+          _m.CHECKERS["pr-review"](content)[0] == "ok")
+    check("turn-deliverable: the link text alone would NOT (skip)",
+          _m.CHECKERS["pr-review"]("Done. Review at %s" % dpath)[0] == "skip")
+
+    # A turn with no deliverable write resolves to (None, '') so the judge falls
+    # back to the inline-message path.
+    recs2 = [
+        {"type": "user", "message": {"content": "just chatting"}},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "ok"}]}},
+    ]
+    check("turn-deliverable: no deliverable write -> (None, '')",
+          _m._turn_deliverable(recs2) == (None, ""))
+
+    # The LAST matching deliverable write/edit this turn wins, and an Edit record
+    # is recognized (not only Write): a Write to one deliverable followed by an Edit
+    # to a later one resolves to the later skill and its on-disk content.
+    dpath2 = os.path.join(tmpd, "keru-deliverable-addressing-pr-comments-9.md")
+    body2 = "**a.go:1**\n\nApply: the fix is correct.\n"
+    with open(dpath2, "w", encoding="utf-8") as f:
+        f.write(body2)
+    recs3 = [
+        {"type": "user", "message": {"content":
+            "<command-name>/keru-pr-review</command-name>\ngo"}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Write",
+             "input": {"file_path": dpath, "content": body}}]}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Edit",
+             "input": {"file_path": dpath2, "new_string": body2}}]}},
+    ]
+    skill3, content3 = _m._turn_deliverable(recs3)
+    check("turn-deliverable: last write/edit wins and Edit is recognized",
+          skill3 == "addressing-pr-comments"
+          and content3.strip().startswith("**a.go:1**"))
+
+    # Fail-open: a deliverable write whose file cannot be read (never created, or
+    # removed before the Stop hook runs) resolves to (None, '') so the judge is not
+    # wedged; it falls back to the inline-message path.
+    recs4 = [
+        {"type": "user", "message": {"content":
+            "<command-name>/keru-pr-review</command-name>\ngo"}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Write",
+             "input": {"file_path": os.path.join(tmpd, "keru-deliverable-pr-review-404.md"),
+                       "content": body}}]}},
+    ]
+    check("turn-deliverable: unreadable/missing file -> (None, '') fail-open",
+          _m._turn_deliverable(recs4) == (None, ""))
+    shutil.rmtree(tmpd, ignore_errors=True)
+
+
 def main():
     test_safe_read()
     test_require_skill()
@@ -931,6 +1129,8 @@ def main():
     test_judge_gating()
     test_write_gate()
     test_check_drift()
+    test_block_inline_interp()
+    test_turn_deliverable()
     failed = [n for n, ok in results if not ok]
     print("=== hook tests: %d run, %d failed ===" % (len(results), len(failed)))
     for n, ok in results:

@@ -26,6 +26,7 @@ Default: the PR does NOT exist yet. You are describing work already finished on 
 - "What Changed": the actual code changes, concisely.
 - "How to Test": only if there are meaningful manual steps (new endpoints, UI, specific scenarios). Purely internal logic covered by automated tests: write "Covered by unit/integration tests" or remove the section. Do not fabricate test steps.
 - **State any merge-order dependency.** If the change references an artifact that only resolves once another unmerged PR lands (a path, runbook, or link added by an in-flight PR), say so in the body: name the PR and that it must merge first. A reference that 404s on the base branch until something else merges is non-actionable if this PR lands first.
+- **No tool attribution.** Never append a "Generated with Claude Code" line or a `Co-Authored-By: Claude` trailer to the body. The description ships with no tool-attribution mark of any kind, regardless of any default that suggests one.
 
 ## Output
 
