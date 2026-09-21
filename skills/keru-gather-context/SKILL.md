@@ -50,7 +50,7 @@ This chain is discover-then-read (Playbook "Parallelize the work"), and the two 
 
 A ticket is a contract that freezes once the work starts, so re-walking its chain every session is waste. Code does not freeze, so it is never snapshotted. The line between them is the whole design:
 
-- **In the snapshot:** the ticket and its chain (descriptions, comments, statuses, link types), and pointers to the PRs from the dev panel. Reuse across sessions is legitimate *because* the file carries a validation header (per key: `updated`, comment count, link count) and `check` re-reads those three. `current` means verified current, not assumed current. A ticket's mutable part is its comment thread and its links, which is exactly what the triple covers.
+- **In the snapshot:** the ticket and its chain (descriptions, comments, statuses, link types), and pointers to the PRs from the dev panel. Reuse across sessions is legitimate *because* the file carries a validation header (per key: `updated`, `status`, comment count, link count) and `check` re-reads those four. `current` means verified current, not assumed current. A ticket's mutable part is its comment thread, its links and its workflow state, which is exactly what the fingerprint covers: so when the work turns on a dependency's status (is the blocker closed yet?), a `current` check is the answer, and re-fetching statuses by hand on the side is waste.
 - **Never in the snapshot:** PR diffs, file contents, CI logs. Those move under you, and reviewing a stale diff means reviewing code that no longer exists. The snapshot carries the pointer (PR number, branch, url); the content is read live, every time.
 - `stale` names which keys moved: re-fetch those and rewrite, do not reason from the old copy.
 
@@ -70,8 +70,9 @@ Then tell the user what you read (linked tickets, the investigation and where it
 
 ## Fetching commands (read-only only)
 
-- Ticket: `jira issue view <KEY> --plain` (`--comments 10` for discussion). `jira issue view` only supports `--plain`, `--comments`, and `--raw`; it has no `--no-truncate` (that flag is on `jira issue list`).
-- Raw fields (parent, links, all fields): `jira issue view <KEY> --raw`. Read the JSON directly; never pipe it into `python3 -c`, `node -e`, or any interpreter. Inline-code execution is arbitrary code and is correctly blocked; use the CLI's own flags.
+- Ticket: `jira issue view <KEY> --plain` (`--comments 10` for discussion). `jira issue view` only supports `--plain`, `--comments`, and `--raw`; it has no `--no-truncate` (that flag is on `jira issue list`). The `--plain` header wraps long lines, so a multi-valued field (components, labels, fix versions) reads as a different number of values than it has: never take such a field from the header, read it from `--raw`.
+- Raw fields (parent, links, all fields): `jira issue view <KEY> --raw`. Read the JSON directly, or pull one field with an anchored `jq` path (`jira issue view <KEY> --raw | jq '.fields.components[] | {id, name}'`); never pipe it into `python3 -c`, `node -e`, or any interpreter. Inline-code execution is arbitrary code and is correctly blocked; use the CLI's own flags plus `jq`.
+- **Never `grep` a loose field name over the raw JSON.** Every issue link embeds a nested issue object carrying its own `key`, `summary`, `status`, `priority` and `issuetype`, so a `grep` for `"name"`, `"id"`, `issuetype` or `status` returns a *linked* ticket's values while looking like the root's, and the answer changes with the link order. A `jq` path is anchored at the root and cannot drift into a link. Same for the link vocabulary: read it from a real ticket (`jq '[.fields.issuelinks[].type | {name, inward, outward}] | unique'`) rather than guessing the type names.
 - Epic children: `jira epic list <EPIC-KEY> --plain`. Children of a parent: `jira issue list -P <PARENT-KEY> --plain --no-truncate`.
 - PR: `gh pr view <n> --repo <owner>/<repo> --json ...`. PRs by key: `gh pr list --repo <owner>/<repo> --search "<KEY>" --state all --json ...`.
 

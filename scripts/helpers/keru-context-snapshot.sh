@@ -8,17 +8,20 @@
 # Why a snapshot is legitimate here, when caching code is not: a ticket is treated
 # as a contract that mostly stops moving once the work starts, while code moves
 # under you constantly. But "should not change" is not "did not change", so the file
-# carries a validation header (per key: updated, comment count, link count) and
-# `check` re-reads those three from Jira before the copy is reused. What that does
+# carries a validation header (per key: updated, status, comment count, link count)
+# and `check` re-reads those four from Jira before the copy is reused. What that does
 # and does not prove, exactly: it catches a field or description edit (which moves
-# `updated`), an added or deleted comment, and an added or removed link; it does NOT
-# catch an edit to an existing comment that leaves both the count and `updated`
-# untouched. The counts are stored rather than trusting `updated` alone because
-# whether a new comment bumps `updated` was never confirmed on this Jira.
+# `updated`), a workflow transition, an added or deleted comment, and an added or
+# removed link; it does NOT catch an edit to an existing comment that leaves both the
+# count and `updated` untouched. The counts and the status are stored rather than
+# trusting `updated` alone because whether a new comment or a transition bumps
+# `updated` was never confirmed on this Jira, and a dependency's workflow state
+# (is the blocker closed yet?) is exactly what a reader acts on, so it must be
+# validated rather than re-fetched by hand on the side.
 #
 # Usage: keru-context-snapshot <mode> <ISSUE-KEY>
 #   write <KEY>   walk the chain and write /tmp/keru-context-<KEY>.md (overwrites)
-#   check <KEY>   re-read the validation triple for every key in that file and
+#   check <KEY>   re-read the validation fingerprint for every key in that file and
 #                 report `current` or which keys moved (exit 0 current, 3 stale)
 #   path  <KEY>   print the snapshot path and whether it exists
 #
@@ -57,10 +60,11 @@ if [ "$MODE" = "path" ]; then
   exit 0
 fi
 
-# The validation triple for one key: what can change on a ticket after work starts.
-# `updated` alone is not enough: it is not confirmed that a new comment bumps it,
-# so the counts are read directly rather than inferred from a timestamp.
-triple() {  # triple KEY -> one JSON object, or empty when the fetch is unusable
+# The validation fingerprint for one key: what can change on a ticket after work
+# starts. `updated` alone is not enough: it is not confirmed that a new comment or a
+# transition bumps it, so the status and the counts are read directly rather than
+# inferred from a timestamp.
+fingerprint() {  # fingerprint KEY -> one JSON object, or empty when the fetch is unusable
   local raw out
   raw="$(jira issue view "$1" --raw 2>/dev/null)"
   # `jira` can print a banner or an error on stdout, which is not JSON: feeding that
@@ -68,6 +72,7 @@ triple() {  # triple KEY -> one JSON object, or empty when the fetch is unusable
   jq -e '.fields' >/dev/null 2>&1 <<<"$raw" || return 1
   out="$(jq -c --arg k "$1" \
     '{key: $k, updated: (.fields.updated // "unknown"),
+      status: (.fields.status.name // "unknown"),
       comments: ((.fields.comment.comments // []) | length),
       links: ((.fields.issuelinks // []) | length)}' <<<"$raw" 2>/dev/null)"
   jq -e . >/dev/null 2>&1 <<<"$out" || return 1
@@ -94,7 +99,7 @@ if [ "$MODE" = "check" ]; then
   live="[]"; unfetched="[]"
   while IFS= read -r k; do
     [ -n "$k" ] || continue
-    if t="$(triple "$k")" && [ -n "$t" ]; then
+    if t="$(fingerprint "$k")" && [ -n "$t" ]; then
       live="$(jq -c --argjson t "$t" '. + [$t]' <<<"$live")"
     else
       unfetched="$(jq -c --arg k "$k" '. + [$k]' <<<"$unfetched")"
@@ -105,10 +110,12 @@ if [ "$MODE" = "check" ]; then
   report="$(jq -n --argjson stored "$stored" --argjson live "$live" \
                   --argjson unfetched "$unfetched" --arg f "$FILE" '
     [$live[] as $l | ($stored[] | select(.key == $l.key)) as $s
+     | ($s.status // "unknown") as $was_status
      | {key: $l.key,
-        moved: (($s.updated != $l.updated) or ($s.comments != $l.comments) or ($s.links != $l.links)),
-        was: {updated: $s.updated, comments: $s.comments, links: $s.links},
-        now: {updated: $l.updated, comments: $l.comments, links: $l.links}}] as $cmp
+        moved: (($s.updated != $l.updated) or ($was_status != $l.status)
+                or ($s.comments != $l.comments) or ($s.links != $l.links)),
+        was: {updated: $s.updated, status: $was_status, comments: $s.comments, links: $s.links},
+        now: {updated: $l.updated, status: $l.status, comments: $l.comments, links: $l.links}}] as $cmp
     | [$cmp[] | select(.moved)] as $moved
     | {status: (if ($cmp | length) == 0 then "unreadable"
                 elif ($moved | length) > 0 then "stale"
@@ -119,7 +126,7 @@ if [ "$MODE" = "check" ]; then
        stale_keys: [$moved[] | .key],
        unfetched_keys: $unfetched,
        detail: $moved,
-       note: "current means every key matched on updated + comment count + link count; the body itself was not re-read, and an edit to an existing comment that leaves the count and the timestamp unchanged would not be caught"}')"
+       note: "current means every key matched on updated + status + comment count + link count, so a dependency that has since been closed or reopened reads as stale and does not need a separate status re-fetch; the body itself was not re-read, and an edit to an existing comment that leaves the count and the timestamp unchanged would not be caught. A header written before status was validated shows was.status=unknown and reports stale once: rewrite it"}')"
   if [ -z "$report" ]; then
     jq -n '{status:"unreadable", reason:"could not compare the header against Jira"}'
     exit 3
@@ -186,9 +193,10 @@ fi
 # Validation header: the root plus every key in the chain.
 validate="$(jq -c --argjson linked "$linked_json" '
   [{key: (.key // "?"), updated: (.fields.updated // "unknown"),
+    status: (.fields.status.name // "unknown"),
     comments: ((.fields.comment.comments // []) | length),
     links: ((.fields.issuelinks // []) | length)}]
-  + [$linked[] | {key, updated, comments, links}]' <<<"$root_raw")"
+  + [$linked[] | {key, updated, status, comments, links}]' <<<"$root_raw")"
 
 {
   printf '# Context snapshot: %s\n\n' "$KEY"
