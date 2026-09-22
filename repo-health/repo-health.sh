@@ -137,16 +137,31 @@ check_installer() {
   SANDBOX="$(mktemp -d)"
   local s1="$SANDBOX/.snap1" s2="$SANDBOX/.snap2" d="$SANDBOX/.diff"
 
+  # Sandboxing HOME also hides the toolchain's own state, which the installer
+  # needs: `python3` here is a mise shim, mise refuses to read a config it does
+  # not trust, and its trust store lives under the REAL $HOME (~/.local/state/mise),
+  # so every sandboxed run read the config as untrusted, python3 died, and
+  # merge_config took install.sh down with it. The config path comes from the real
+  # config dir either way (mise resolves it absolutely, not via the sandboxed
+  # HOME), so trust is granted by env, which is HOME-independent. Harmless when
+  # mise is not installed. Captured before HOME is overridden.
+  local real_config="${XDG_CONFIG_HOME:-$HOME/.config}"
+  local mise_trust="$real_config/mise/config.toml"
+
   # Pin BOTH HOME and CLAUDE_CONFIG_DIR to the sandbox: the installer resolves
   # its target as ${CLAUDE_CONFIG_DIR:-$HOME/.claude}, so if the caller's env has
   # CLAUDE_CONFIG_DIR set (Claude Code does), a HOME-only override would leak and
   # uninstall.sh would strip the REAL ~/.claude. Isolation must not depend on env.
-  run_install()   { HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" SHELL=/bin/zsh bash "$REPO_DIR/scripts/install.sh"   >/dev/null 2>&1; }
-  run_uninstall() { HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" SHELL=/bin/zsh bash "$REPO_DIR/scripts/uninstall.sh" >/dev/null 2>&1; }
+  # Output goes to a log inside the sandbox rather than /dev/null: a bare "failed
+  # in sandbox" says nothing about why, and the reason is usually environmental
+  # (a missing tool, an untrusted config) rather than a bug in the installer.
+  run_install()   { HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" SHELL=/bin/zsh MISE_TRUSTED_CONFIG_PATHS="$mise_trust" bash "$REPO_DIR/scripts/install.sh"   >"$SANDBOX/.run.log" 2>&1; }
+  run_uninstall() { HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" SHELL=/bin/zsh MISE_TRUSTED_CONFIG_PATHS="$mise_trust" bash "$REPO_DIR/scripts/uninstall.sh" >"$SANDBOX/.run.log" 2>&1; }
+  run_tail() { tail -3 "$SANDBOX/.run.log" 2>/dev/null | tr '\n' ' ' | cut -c1-200; }
 
-  if ! run_install; then fail "install.sh failed in sandbox"; return; fi
+  if ! run_install; then fail "install.sh failed in sandbox: $(run_tail)"; return; fi
   snapshot "$s1"
-  if ! run_install; then fail "install.sh failed on the second run"; return; fi
+  if ! run_install; then fail "install.sh failed on the second run: $(run_tail)"; return; fi
   snapshot "$s2"
 
   if ! diff "$s1" "$s2" > "$d" 2>&1; then
