@@ -11,7 +11,7 @@ This command delegates the review itself. `keru-pr-review` owns the analysis, th
 
 ## Procedure
 
-1. **Run `keru-pr-review <PR>`.** Let it do its full job (pin the repo/branch, fan out, verify each finding, classify) and produce its gated deliverable at `/tmp/keru-deliverable-pr-review-<pr>.md`. Do not review the PR yourself here; use that skill's output as the source.
+1. **Run `keru-pr-review <PR>`.** Let it do its full job (pin the repo/branch, fan out, verify each finding, classify) and produce its gated deliverable at `~/.claude/keru-deliverables/keru-deliverable-pr-review-<pr>.md`. Do not review the PR yourself here; use that skill's output as the source.
 2. **Validate before posting.** Every inline comment must anchor to a line the PR actually modified, which is exactly `keru-pr-review`'s own diff-attribution rule (it already verifies each finding sits on an added/changed line before classifying it). Re-check that here against the deliverable, do not re-derive the mechanic. For each finding:
    - If it anchors to a modified line, it is a real inline comment.
    - If it does not (it points at unchanged or pre-existing code), it is not postable as an inline comment. Re-invoke `keru-pr-review` to correct or re-anchor it, UNLESS it is a general / PR-level finding (a missing acceptance criterion, a scope question), which by that skill's own rule has no line anchor and belongs in the review body, not as an inline comment. Do not loop on this indefinitely: if a comment cannot be anchored after one correction pass, demote it to the review body rather than re-invoking again.

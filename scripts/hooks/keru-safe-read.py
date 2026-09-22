@@ -243,9 +243,11 @@ GH_READONLY = {
 # comments). keru-branch-cleanup is NOT here: it is read-only only in `audit`
 # mode, so it is handled separately below (`clean` deletes branches and defers).
 KERU_READONLY_HELPERS = {"keru-jira-dev", "keru-bot-triage", "keru-usage",
-                         # keru-context-snapshot only reads Jira; its `write` mode
-                         # creates exactly one file, /tmp/keru-context-<KEY>.md, so
-                         # every mode is local-reversible with a bounded path.
+                         # keru-context-snapshot only reads Jira; on disk its
+                         # `write` mode creates exactly one file,
+                         # <config>/keru-context/<KEY>.md, and `check` touches that
+                         # same file's timestamp, so every mode is local-reversible
+                         # with a bounded path.
                          "keru-context-snapshot",
                          # keru-session-brief only reads transcripts and prints;
                          # it writes nothing at all.
@@ -725,6 +727,13 @@ def tokens_are_safe(tokens) -> bool:
     elif base == "keru-cache-clean":
         # Read-only only in `audit` mode; `clean` purges caches / prunes Docker,
         # so defer it (permissions.json also carries the explicit `ask` rule).
+        sub = tokens[1] if len(tokens) > 1 else ""
+        if sub != "audit":
+            return False
+    elif base == "keru-artifacts-prune":
+        # Read-only only in `audit` mode. `prune` deletes deliverables, which are
+        # model work and do not regenerate, so it defers even though the files are
+        # local (permissions.json carries the explicit `ask` rule).
         sub = tokens[1] if len(tokens) > 1 else ""
         if sub != "audit":
             return False

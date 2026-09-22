@@ -243,6 +243,7 @@ install_helpers() {
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-branch-cleanup.sh" "$BIN_DIR/keru-branch-cleanup"
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-repo-update.sh" "$BIN_DIR/keru-repo-update"
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-cache-clean.sh" "$BIN_DIR/keru-cache-clean"
+  install -m 0755 "$REPO_DIR/scripts/helpers/keru-artifacts-prune.sh" "$BIN_DIR/keru-artifacts-prune"
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-usage.sh" "$BIN_DIR/keru-usage"
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-context-snapshot.sh" "$BIN_DIR/keru-context-snapshot"
   install -m 0755 "$REPO_DIR/scripts/helpers/keru-session-brief.sh" "$BIN_DIR/keru-session-brief"
@@ -273,8 +274,28 @@ PY
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-judge-output.py" "$BIN_DIR/keru-judge-output"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-gate-deliverable.py" "$BIN_DIR/keru-gate-deliverable"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-check-drift.py" "$BIN_DIR/keru-check-drift"
-  echo "installed: keru-jira-dev, keru-jira-set-components, keru-bot-triage, keru-branch-cleanup, keru-repo-update, keru-cache-clean, keru-usage, keru-context-snapshot, keru-session-brief, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill, keru-check-output, keru-judge-output, keru-gate-deliverable, keru-check-drift in $BIN_DIR"
+  echo "installed: keru-jira-dev, keru-jira-set-components, keru-bot-triage, keru-branch-cleanup, keru-repo-update, keru-cache-clean, keru-artifacts-prune, keru-usage, keru-context-snapshot, keru-session-brief, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill, keru-check-output, keru-judge-output, keru-gate-deliverable, keru-check-drift in $BIN_DIR"
   ensure_on_path
+}
+
+# The two artifact dirs, created here so the layout exists before anything writes
+# to it (the Write tool would create the deliverables dir on first use, but the
+# directory is also what /keru-artifacts-prune audits, and an audit of a missing
+# dir reads as "nothing to collect" rather than "never used"). They hold the
+# things that must outlive a session, which is why they are not under /tmp: on
+# this machine nothing user-owned there survived a reboot. Never cleaned by the
+# installer: pruning is a typed, confirmed action (/keru-artifacts-prune).
+#
+# It creates the directories and NOTHING else. There is deliberately no migration
+# of leftovers from the old /tmp home: `$CLAUDE_DIR` is redirected to a throwaway
+# sandbox when repo-health tests installer idempotency (repo-health/repo-health.sh),
+# while /tmp would stay real, so a migration here would move live artifacts of a
+# running session into a directory that the test then deletes. That is not a
+# theoretical risk: it destroyed a real deliverable during review. Anything left in
+# /tmp is moved by hand, once, or simply regenerated.
+install_artifact_dirs() {
+  mkdir -p "$CLAUDE_DIR/keru-context" "$CLAUDE_DIR/keru-deliverables"
+  echo "artifact dirs: $CLAUDE_DIR/keru-context, $CLAUDE_DIR/keru-deliverables"
 }
 
 # Make sure ~/.local/bin is on PATH so helpers resolve by bare name. Adds a
@@ -394,6 +415,7 @@ link_files commands
 prune_dangling commands
 merge_config
 install_helpers
+install_artifact_dirs
 write_drift_marker
 check_tools
 

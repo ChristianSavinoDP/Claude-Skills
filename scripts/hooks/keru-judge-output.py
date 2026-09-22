@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Stop hook: an LLM judge reviews a finished skill deliverable for the rules a
-regex cannot check (tone, unverified/uncited claims, gist-substituted shape),
-and blocks the turn once if it does not comply.
+regex cannot check (tone, unverified/uncited claims, gist-substituted shape,
+content the reader would not act on), and blocks the turn once if it does not
+comply.
 
 Why this exists: across a long session, rules that depend on Claude *recalling*
 and self-applying them (tone, "verify before asserting", "open with the
@@ -82,6 +83,7 @@ JUDGE_CRITERIA = """You are a strict compliance reviewer for a deliverable produ
 3. INVENTED RULES / FABRICATION: does it assert a rule, constraint, or fact that it does not actually support? (Stating a violation without quoting the rule, claiming something was verified that was not.)
 4. SHAPE DRIFT: beyond the first line (already checked), does the body follow the skill's required structure, or did it substitute a remembered-but-wrong shape (prose essay where structured findings are required, etc.)?
 5. LANGUAGE: the Playbook requires every deliverable in English regardless of the chat language. If the deliverable's prose is written in another language (Spanish, etc.), that is a violation. Proper nouns, code, package names, and identifiers do not count.
+6. OVER-EXPLANATION / WRONG AUDIENCE: the Playbook requires the deliverable cut to what its reader decides with, so content that reader would not act on is a violation, not a stylistic preference. Point at the specific sentences that restate the diff or the data the reader is about to read, explain the repo's own tooling or process back to the team that owns it, pre-empt an objection nobody raised, answer a question only the author's own review pass asked, or duplicate something already recorded in the change itself or on a ticket. Register counts as well: a bold lead-in on every paragraph, an inventory bullet per changed item, or every clause closing an argument reads as machine output rather than a colleague writing. Judge relevance, not word count: a long deliverable whose every sentence earns its place complies, and a short one padded with the above does not.
 
 Be precise and conservative: only flag a CLEAR violation you can point to. A judgment call that is defensible is NOT a violation. If it complies, say so."""
 
@@ -177,7 +179,7 @@ def main():
         return
     # Cheap gate, two stages, before spending any model call:
     # 1. Which deliverable skill governs this turn, and its ACTUAL content. Prefer
-    #    the file-based deliverable: the file skills write /tmp/keru-deliverable-*.md
+    #    the file-based deliverable: the file skills write keru-deliverable-*.md
     #    and leave only a LINK in chat, so judging the last assistant message would
     #    judge the link, not the deliverable (its content would never be seen).
     #    _turn_deliverable reads that file's content from disk; fall back to the

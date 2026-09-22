@@ -441,14 +441,15 @@ def _last_user_idx(records):
     return idx
 
 
-# A deliverable file path: /tmp/keru-deliverable-<skill>[-<id>].md. The <id> is
+# A deliverable file path: <config>/keru-deliverables/keru-deliverable-<skill>[-<id>].md.
+# Matched on the basename alone, so the directory move did not touch this. The <id> is
 # optional and the <skill> may contain hyphens, so the stem is matched against the
 # known CHECKERS keys (below), never split on hyphens.
 DELIVERABLE_PATH_RE = re.compile(r"keru-deliverable-(.+)\.md$")
 
 
 def _skill_from_deliverable_path(path):
-    """Normalized skill name from a /tmp/keru-deliverable-<skill>[-<id>].md path, or
+    """Normalized skill name from a keru-deliverable-<skill>[-<id>].md path, or
     None. Matches the stem against the known CHECKERS keys (longest first), so a
     hyphenated skill name and an optional numeric id are resolved without ambiguity."""
     if not isinstance(path, str):
@@ -468,7 +469,8 @@ def _turn_deliverable(records):
     with the content read from disk; else (None, '').
 
     The file-based skills (addressing-pr-comments, pr-review, ...) write the
-    deliverable to /tmp/keru-deliverable-<skill>[-<id>].md and leave only a LINK in
+    deliverable to ~/.claude/keru-deliverables/keru-deliverable-<skill>[-<id>].md
+    and leave only a LINK in
     chat, so the last assistant message is not the deliverable, the file is. This
     finds the most recent such Write/Edit in the current turn and reads the final
     on-disk content, so the checker and the LLM judge see the real deliverable

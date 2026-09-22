@@ -233,7 +233,7 @@ printf '%s\n' "$BODY"
 # Anything a snapshot exists for can be re-verified instead of re-walked.
 while IFS= read -r k; do
   [ -n "$k" ] || continue
-  [ -f "/tmp/keru-context-${k}.md" ] && printf -- '- snapshot on disk for %s: verify with `keru-context-snapshot check %s`\n' "$k" "$k"
+  [ -f "${CLAUDE_CONFIG_DIR:-${HOME:-/nonexistent}/.claude}/keru-context/${k}.md" ] && printf -- '- snapshot on disk for %s: verify with `keru-context-snapshot check %s`\n' "$k" "$k"
 done <<<"$KEYS"
 printf '\nMechanical state from the transcript, not an account of what was decided: treat it as pointers to re-read, not as facts.\n'
 exit 0

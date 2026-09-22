@@ -687,20 +687,43 @@ def test_judge_gating():
 
 def gate_denies(file_path, content, tool="Write"):
     """Run the PreToolUse Write/Edit gate; True if it denies the write."""
+    return gate_verdict(file_path, content, tool)[0] == "deny"
+
+
+def gate_reason(file_path, content, tool="Write"):
+    """The gate's reason string for one payload, or '' when it allowed silently.
+    A denial has to be actionable, so some tests assert on what it says."""
+    return gate_verdict(file_path, content, tool)[1]
+
+
+def gate_verdict(file_path, content, tool="Write"):
+    """(decision, reason) from the gate for one Write/Edit payload. ('', '') when
+    the gate stayed silent, which is how it allows."""
     key = "content" if tool == "Write" else "new_string"
     payload = {"tool_name": tool, "tool_input": {"file_path": file_path, key: content}}
     out = subprocess.run([sys.executable, GATE], input=json.dumps(payload),
                          capture_output=True, text=True).stdout.strip()
     if not out:
-        return False
+        return "", ""
     try:
-        return json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+        h = json.loads(out)["hookSpecificOutput"]
+        return h.get("permissionDecision", ""), h.get("permissionDecisionReason", "")
     except Exception:
-        return False
+        return "", ""
 
 
 def test_write_gate():
-    P = "/tmp/keru-deliverable-pr-review.md"
+    # A gated draft is accepted only in the deliverables dir, so every CONTENT
+    # assertion below uses a path there; the location rule is asserted on its own
+    # at the end. Nothing is created: the gate validates the payload, it does not
+    # write. The dir is resolved the same way the gate resolves it.
+    _cfg = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.expanduser("~/.claude")
+    _ddir = os.path.join(_cfg, "keru-deliverables")
+
+    def dpath(name):
+        return os.path.join(_ddir, name)
+
+    P = dpath("keru-deliverable-pr-review.md")
     # Malformed deliverable to the gated path -> DENY (file never written).
     check("write-gate: malformed review -> deny",
           gate_denies(P, "Verified CI. Now:\n\nVerdict: Approve\n\n### Nits\n`a.go:1`\nWhy: ok."))
@@ -718,50 +741,71 @@ def test_write_gate():
     # must resolve from the stem despite the suffix, so a malformed deliverable to
     # an id-suffixed path is denied and a valid one is allowed.
     check("write-gate: id-suffixed review (PR num) malformed -> deny",
-          gate_denies("/tmp/keru-deliverable-pr-review-3254.md",
+          gate_denies(dpath("keru-deliverable-pr-review-3254.md"),
                       "Intro prose.\n\nVerdict: Approve\n\n### Nits\n`a.go:1`\nWhy: ok."))
     check("write-gate: id-suffixed review (PR num) valid -> allow",
-          not gate_denies("/tmp/keru-deliverable-pr-review-3254.md",
+          not gate_denies(dpath("keru-deliverable-pr-review-3254.md"),
                           "Verdict: Approve\n\n### Nits\n`a.go:1`\nWhy: ok."))
     # A skill name that itself contains hyphens must resolve with an id suffix too.
     check("write-gate: hyphenated skill + Jira id malformed -> deny",
-          gate_denies("/tmp/keru-deliverable-addressing-pr-comments-DBI-1477.md",
+          gate_denies(dpath("keru-deliverable-addressing-pr-comments-DBI-1477.md"),
                       "I reviewed both.\n\n**a.go:55**\n\nApplied."))
     check("write-gate: hyphenated skill + Jira id valid -> allow",
-          not gate_denies("/tmp/keru-deliverable-addressing-pr-comments-DBI-1477.md",
+          not gate_denies(dpath("keru-deliverable-addressing-pr-comments-DBI-1477.md"),
                           "**a.go:55**\n\nApplied a rewrite.\n\n**b.md:10**\n\nPushed back."))
     # Em dash still caught with an id suffix present.
     check("write-gate: id-suffixed ticket em-dash -> deny",
-          gate_denies("/tmp/keru-deliverable-writing-tickets-DBI-9.md",
+          gate_denies(dpath("keru-deliverable-writing-tickets-DBI-9.md"),
                       "**Fix it**\n\nProblem — dash.\n\n### Acceptance Criteria\n- x"))
     # Language rule (Playbook: all deliverables in English). The live bug: a ticket
     # drafted in the chat language (Spanish) was written because nothing enforced
     # English. A well-formed-but-Spanish ticket to the gated path must now DENY.
     check("write-gate: Spanish ticket -> deny",
-          gate_denies("/tmp/keru-deliverable-writing-tickets-ES.md",
+          gate_denies(dpath("keru-deliverable-writing-tickets-ES.md"),
                       "**Cerrar los PRs duplicados**\n\nHay que cerrar los PRs "
                       "duplicados y actualizar las vulnerabilidades de seguridad.\n\n"
                       "### Acceptance Criteria\n- Los duplicados quedan cerrados."))
     # The English translation of the same ticket is allowed (proves it is the
     # language, not the content, that was blocked).
     check("write-gate: English ticket -> allow",
-          not gate_denies("/tmp/keru-deliverable-writing-tickets-EN.md",
+          not gate_denies(dpath("keru-deliverable-writing-tickets-EN.md"),
                           "**Close the duplicate PRs**\n\nClose the stale duplicate "
                           "bot PRs and remediate the security alerts.\n\n"
                           "### Acceptance Criteria\n\n- The duplicates are closed."))
     # A stem that names no known skill is not gated (allowed), even malformed.
     check("write-gate: unknown skill stem -> allow",
-          not gate_denies("/tmp/keru-deliverable-nonsense-skill.md", "Whatever — prose."))
+          not gate_denies(dpath("keru-deliverable-nonsense-skill.md"), "Whatever — prose."))
     # Ticket path enforces the ticket contract.
     check("write-gate: malformed ticket -> deny",
-          gate_denies("/tmp/keru-deliverable-writing-tickets.md",
+          gate_denies(dpath("keru-deliverable-writing-tickets.md"),
                       "Here is the ticket:\n\n**T**\n\n### Acceptance Criteria\n- x"))
     check("write-gate: valid ticket -> allow",
-          not gate_denies("/tmp/keru-deliverable-writing-tickets.md",
+          not gate_denies(dpath("keru-deliverable-writing-tickets.md"),
                           "**Fix it**\n\nProblem.\n\n### Acceptance Criteria\n\n- x"))
     # Edit tool on a deliverable file is gated too (new_string validated).
     check("write-gate: Edit malformed review -> deny",
           gate_denies(P, "Intro prose.\n\nVerdict: Approve\n\n### Nits\n`a.go:1`\nWhy: ok.", tool="Edit"))
+
+    # LOCATION. A compliant deliverable is still denied outside the deliverables
+    # dir: /tmp was the old home and does not survive a reboot here, and the rule
+    # is enforced rather than left to whichever skill file the model loaded.
+    valid_ticket = "**Fix it**\n\nProblem.\n\n### Acceptance Criteria\n\n- x"
+    check("write-gate: valid ticket in /tmp -> deny (wrong location)",
+          gate_denies("/tmp/keru-deliverable-writing-tickets.md", valid_ticket))
+    check("write-gate: valid ticket in the deliverables dir -> allow",
+          not gate_denies(dpath("keru-deliverable-writing-tickets.md"), valid_ticket))
+    # A literal '~' is refused, not expanded: the Write tool would create a
+    # directory actually named '~' instead of resolving it to the home dir.
+    check("write-gate: unexpanded ~ path -> deny",
+          gate_denies("~/.claude/keru-deliverables/keru-deliverable-writing-tickets.md",
+                      valid_ticket))
+    # The denial must be actionable, so it names the directory to write to.
+    check("write-gate: location denial names the deliverables dir",
+          _ddir in gate_reason("/tmp/keru-deliverable-writing-tickets.md", valid_ticket))
+    # An unknown stem is still ungated wherever it lives: the location rule only
+    # applies once the stem resolves to a real skill contract.
+    check("write-gate: unknown stem in /tmp -> allow",
+          not gate_denies("/tmp/keru-deliverable-nonsense-skill.md", "Whatever prose."))
 
     # Regression: the INSTALLED copies have no .py extension. spec_from_file_location
     # infers the loader from the extension, so an extensionless gate used to fail to
@@ -774,7 +818,7 @@ def test_write_gate():
         shutil.copy(GATE, os.path.join(d, "keru-gate-deliverable"))
         shutil.copy(CHECK_OUTPUT, os.path.join(d, "keru-check-output"))
         payload = {"tool_name": "Write", "tool_input": {
-            "file_path": "/tmp/keru-deliverable-writing-tickets.md",
+            "file_path": dpath("keru-deliverable-writing-tickets.md"),
             "content": "**T**\n\nx — y.\n\n### Acceptance Criteria\n- a"}}
         out = subprocess.run([sys.executable, os.path.join(d, "keru-gate-deliverable")],
                              input=json.dumps(payload), capture_output=True, text=True).stdout.strip()
@@ -1027,7 +1071,7 @@ def test_block_inline_interp():
 # --- keru-check-output: file-based deliverable resolution --------------------
 
 def test_turn_deliverable():
-    """Regression: a file-based deliverable (a Write to /tmp/keru-deliverable-*.md,
+    """Regression: a file-based deliverable (a Write to a keru-deliverable-*.md,
     with only a LINK left in chat) must resolve to the FILE's content, so the LLM
     judge reviews the real deliverable instead of the link. Exercises
     keru-check-output's _turn_deliverable / _skill_from_deliverable_path directly."""
@@ -1041,11 +1085,14 @@ def test_turn_deliverable():
           src.count("def check_pr_review(") == 1)
 
     # Path resolution: hyphenated skill name + optional id both resolve; a
-    # non-deliverable path resolves to None.
+    # non-deliverable path resolves to None. Resolution is by BASENAME, so it holds
+    # in the current deliverables dir and in the old /tmp one alike (which is why
+    # moving the drafts needed no change here; the gate owns the location rule).
     check("deliverable-path: addressing-pr-comments with id",
-          _m._skill_from_deliverable_path("/tmp/keru-deliverable-addressing-pr-comments-1.md")
+          _m._skill_from_deliverable_path(
+              os.path.expanduser("~/.claude/keru-deliverables/keru-deliverable-addressing-pr-comments-1.md"))
           == "addressing-pr-comments")
-    check("deliverable-path: pr-review no id",
+    check("deliverable-path: pr-review no id, any dir",
           _m._skill_from_deliverable_path("/tmp/keru-deliverable-pr-review.md") == "pr-review")
     check("deliverable-path: non-deliverable -> None",
           _m._skill_from_deliverable_path("/tmp/notes.md") is None)

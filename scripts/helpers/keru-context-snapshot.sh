@@ -20,14 +20,26 @@
 # validated rather than re-fetched by hand on the side.
 #
 # Usage: keru-context-snapshot <mode> <ISSUE-KEY>
-#   write <KEY>   walk the chain and write /tmp/keru-context-<KEY>.md (overwrites)
+#   write <KEY>   walk the chain and write <config>/keru-context/<KEY>.md (overwrites)
 #   check <KEY>   re-read the validation fingerprint for every key in that file and
-#                 report `current` or which keys moved (exit 0 current, 3 stale)
+#                 report `current` or which keys moved (exit 0 current, 3 stale).
+#                 On `current` it also touches the file, so its mtime records when
+#                 the copy was last verified (keru-artifacts-prune reads that).
 #   path  <KEY>   print the snapshot path and whether it exists
 #
-# Both modes only read Jira; `write` writes exactly one file, under /tmp, keyed by
-# the issue. Nothing else is created or removed, which is why the Bash gate can
+# Every mode only reads Jira; on disk, `write` writes exactly one file under the
+# Claude config dir keyed by the issue, and `check` updates that same file's
+# timestamp. Nothing else is created or removed, which is why the Bash gate can
 # auto-approve every mode (local, reversible, bounded path).
+#
+# Why not /tmp, where this used to live: a snapshot there does not survive a
+# reboot. Checked on 2026-09-22: DBI-1669 was snapshotted four times the previous
+# afternoon and `check` reported `missing` the next morning, with nothing
+# user-owned left in /private/tmp from before the 09:36 boot. The daily
+# /usr/libexec/tmp_cleaner is not the cause (it only collects what has been
+# untouched for 3 days), so the lifetime of /tmp here is one boot, which is
+# shorter than the work it was meant to outlive. Nothing collects the new
+# location, so `keru-artifacts-prune` does that on purpose, by hand.
 #
 # NOT in the snapshot, on purpose: PR diffs, file contents, CI logs. Those move
 # under you, and a stale copy of a diff makes you review code that no longer
@@ -39,12 +51,16 @@ MODE="${1:-}"
 KEY="${2:-}"
 case "$MODE" in
   write|check|path) ;;
-  -h|--help|help) sed -n '1,28p' "$0" | grep -E '^# (Usage|  )' | sed 's/^# //'; exit 0 ;;
+  -h|--help|help) sed -n '1,40p' "$0" | grep -E '^# (Usage|  )' | sed 's/^# //'; exit 0 ;;
   *) echo "usage: keru-context-snapshot <write|check|path> <ISSUE-KEY>" >&2; exit 2 ;;
 esac
 # Same key validation as keru-jira-dev: no flags, URLs or shell metacharacters
 # reach a request or a filename.
-if ! printf '%s' "$KEY" | grep -qE '^[A-Z][A-Z0-9]+-[0-9]+$'; then
+# Matched with bash's own operator rather than `grep -E`: grep applies `^...$` per
+# LINE, so a key carrying an embedded newline ("DBI-1\n../x") passes a grep check
+# while contributing a second path component to the filename below. `=~` anchors
+# against the whole string, which is what "bounded path" has to mean.
+if [[ ! "$KEY" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]]; then
   echo "error: '$KEY' is not a valid issue key (expected like DBI-1234)" >&2
   exit 2
 fi
@@ -52,7 +68,8 @@ fi
 command -v jq >/dev/null 2>&1 || { echo "error: jq not found" >&2; exit 1; }
 command -v jira >/dev/null 2>&1 || { echo "error: jira CLI not found" >&2; exit 1; }
 
-FILE="/tmp/keru-context-${KEY}.md"
+DIR="${CLAUDE_CONFIG_DIR:-${HOME:-/nonexistent}/.claude}/keru-context"
+FILE="$DIR/${KEY}.md"
 
 if [ "$MODE" = "path" ]; then
   jq -n --arg f "$FILE" --argjson e "$([ -f "$FILE" ] && echo true || echo false)" \
@@ -133,7 +150,15 @@ if [ "$MODE" = "check" ]; then
   fi
   printf '%s\n' "$report"
   case "$(jq -r '.status' <<<"$report")" in
-    current) exit 0 ;;
+    current)
+      # Touch it, so mtime means "last verified" and not "first written". That is
+      # what keru-artifacts-prune measures, and atime cannot carry it: on this
+      # volume a read refreshes atime only while atime is older than mtime, so
+      # every read after the first leaves it frozen. Without this, a snapshot
+      # verified daily on a long-running ticket would still age out by the
+      # calendar. Timestamp only; the contents are untouched.
+      touch "$FILE" 2>/dev/null || true
+      exit 0 ;;
     unverified) exit 4 ;;
     *) exit 3 ;;
   esac
@@ -197,6 +222,10 @@ validate="$(jq -c --argjson linked "$linked_json" '
     comments: ((.fields.comment.comments // []) | length),
     links: ((.fields.issuelinks // []) | length)}]
   + [$linked[] | {key, updated, status, comments, links}]' <<<"$root_raw")"
+
+# Created here rather than at install time so the helper also works when it is run
+# from the repo, before any installer has touched this machine.
+mkdir -p "$DIR" 2>/dev/null || { echo "error: could not create $DIR" >&2; exit 1; }
 
 {
   printf '# Context snapshot: %s\n\n' "$KEY"

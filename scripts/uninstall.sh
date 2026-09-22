@@ -193,3 +193,6 @@ echo ""
 echo "Left in place on purpose (remove by hand if you want):"
 echo "  - JIRA_API_TOKEN in $CLAUDE_DIR/settings.json (env)"
 echo "  - permissions.defaultMode (its prior value was not recorded)"
+# Never removed here: the deliverables are model work that does not regenerate, and
+# an uninstall is not a request to throw that away. /keru-artifacts-prune is.
+echo "  - $CLAUDE_DIR/keru-deliverables and $CLAUDE_DIR/keru-context (your artifacts)"

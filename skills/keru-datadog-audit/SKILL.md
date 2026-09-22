@@ -97,7 +97,7 @@ A ticket candidate is an error that has been deep-dived and is both **recurring*
 
 ## Output
 
-Write the report to `/tmp/keru-deliverable-datadog-audit.md` first (the Playbook's gated-deliverable rule; a PreToolUse gate validates it before the file is written). Your chat reply is a link to that file plus at most one line, not its pasted contents. (The audit spans a service set, not one ticket, so no `<id>` suffix; a new audit replaces the last.)
+Write the report to `~/.claude/keru-deliverables/keru-deliverable-datadog-audit.md` first (the Playbook's gated-deliverable rule; a PreToolUse gate validates it before the file is written). Your chat reply is a link to that file plus at most one line, not its pasted contents. (The audit spans a service set, not one ticket, so no `<id>` suffix; a new audit replaces the last.)
 
 Lead with substance. Open with a one-line **Monitors:** roll-up so the team's own alarms lead, naming both states: firing (`<name> (<service>)`) and No Data (`<name> (<service>)`: coverage gap), or "none firing, none dark". Then the per-service sections, ordered worst-first (a firing monitor or a real spike at the top, then highest volume). Use this shape per service:
 
