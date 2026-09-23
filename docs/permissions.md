@@ -43,6 +43,7 @@ Destructive actions (per the playbook's definition), so they prompt even under `
 - `keru-branch-cleanup clean`: deletes local branches whose upstream is gone (not git-recoverable), so it prompts once before the batch; its `audit` mode is read-only and in allow
 - `keru-cache-clean clean`: purges the dev caches and prunes Docker, so it prompts; its `audit` mode is read-only and in allow
 - `keru-artifacts-prune prune`: deletes old context snapshots and gated deliverables under `~/.claude`, and a deliverable is model work that does not regenerate, so it prompts; its `audit` mode is read-only and in allow
+- `keru-claude-update cli` and `keru-claude-update models`: `cli` installs a new Claude Code build through the dp `ai` plugin, `models` rewrites the model keys in `settings.json` (a file that also holds secrets), so both prompt; its `audit` mode is read-only and in allow
 - `terraform apply`, `terraform destroy` (and the same through `dp`: `dp terraform run terraform|tofu * apply|destroy`)
 - Jira writes: `issue create/move/assign/comment/edit/link`, `epic add/create`, `sprint`
 - `keru-jira-set-components`: sets the Components field on an existing Jira issue by numeric id (a remote state change), used by `/keru-create-ticket` step 6. It reads server/login from the `jira` config and builds the `Authorization` header from `$JIRA_API_TOKEN` inside the helper, so the token never lands on argv (unlike a `curl -u`); it is deliberately kept out of the read-only helper allow, so it prompts

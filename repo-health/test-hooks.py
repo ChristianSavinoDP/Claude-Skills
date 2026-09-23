@@ -91,6 +91,10 @@ def test_safe_read():
         # subcommand to defer.
         ("keru-repo-update audit", "keru-repo-update audit ~/Documents/GitHub"),
         ("keru-repo-update update", "keru-repo-update update ~/Documents/GitHub/payments"),
+        # keru-claude-update: only `audit` is read-only (`cli` installs a build,
+        # `models` writes settings.json); both of those are in the ask list below.
+        ("keru-claude-update audit", "keru-claude-update audit"),
+        ("keru-claude-update audit --pin", "keru-claude-update audit --pin opus"),
         # gh api with an EXPLICIT GET method: -f/-F are query-string params, not a
         # POST body, so the search is read-only. The two real-session forms.
         ("gh api -X GET search/code",
@@ -211,6 +215,8 @@ def test_safe_read():
         ("gh api -f no method (implicit POST)", "gh api repos/o/r/issues -f title=x"),
         ("gh api --method PATCH", "gh api --method PATCH repos/o/r/issues/1 -f state=closed"),
         ("keru-branch-cleanup clean", "keru-branch-cleanup clean ~/Documents/GitHub"),
+        ("keru-claude-update cli", "keru-claude-update cli"),
+        ("keru-claude-update models", "keru-claude-update models --pin opus"),
         # pup traces metrics is span-metric CRUD (a write); a flag value that
         # happens to read "search" must not promote it to a read.
         ("pup traces metrics create", "pup traces metrics create --file m.json"),

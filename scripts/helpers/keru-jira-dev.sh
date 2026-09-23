@@ -13,9 +13,11 @@ if [ -z "$KEY" ]; then
   echo "usage: keru-jira-dev <ISSUE-KEY>" >&2
   exit 2
 fi
-# Reject anything that is not a plain issue key (e.g. ABC-123): no flags,
-# no URLs, no shell metacharacters reaching the request.
-if ! printf '%s' "$KEY" | grep -qE '^[A-Z][A-Z0-9]+-[0-9]+$'; then
+# Reject anything that is not a plain issue key (e.g. ABC-123): no flags, no
+# URLs, no shell metacharacters, no embedded newline reaching the request. bash
+# =~ matches the WHOLE string (unlike grep's per-line ^$), so a multi-line value
+# whose first line looks valid is rejected here, not just caught downstream.
+if ! [[ "$KEY" =~ ^[A-Z][A-Z0-9]+-[0-9]+$ ]]; then
   echo "error: '$KEY' is not a valid issue key (expected like DBI-1234)" >&2
   exit 2
 fi

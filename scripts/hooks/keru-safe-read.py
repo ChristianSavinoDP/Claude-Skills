@@ -730,6 +730,13 @@ def tokens_are_safe(tokens) -> bool:
         sub = tokens[1] if len(tokens) > 1 else ""
         if sub != "audit":
             return False
+    elif base == "keru-claude-update":
+        # Read-only only in `audit` mode. `cli` installs a new CLI build through
+        # dp and `models` writes settings.json, so both defer (permissions.json
+        # carries the explicit `ask` rules).
+        sub = tokens[1] if len(tokens) > 1 else ""
+        if sub != "audit":
+            return False
     elif base == "keru-artifacts-prune":
         # Read-only only in `audit` mode. `prune` deletes deliverables, which are
         # model work and do not regenerate, so it defers even though the files are

@@ -28,7 +28,9 @@ For each repo, run `keru-bot-triage <owner/repo>` and read its JSON (`pull_reque
 
 ## Output
 
-Write this to `~/.claude/keru-deliverables/keru-deliverable-bot-triage.md` first (the Playbook's gated-deliverable rule); your chat reply is a link to that file plus at most one line, not its pasted contents. (Triage spans repos, not one ticket, so no `<id>` suffix; one triage replaces the last.) Group by service (repo). For each service, list every open bot PR as a link, then, only if there are security alerts with no fixing PR, list those below the PRs and link to the page where they are viewed (`security_url`).
+Write this to `~/.claude/keru-deliverables/keru-deliverable-bot-triage-<YYYY-MM-DD>.md` first (the Playbook's gated-deliverable rule); your chat reply is a link to that file plus at most one line, not its pasted contents. A triage spans repos rather than one ticket, so today's date is the `<id>`: it keeps the previous run instead of overwriting it, which is the only reason "what is new since last time" can be answered at all.
+
+**Compare against the last triage.** Before writing, find the most recent earlier report (`ls -t ~/.claude/keru-deliverables/keru-deliverable-bot-triage-*.md | head -1`) and, if there is one, read it and mark each PR and alert `new` or `open since <that date>`; a bump that was listed then and is gone now is worth one line too, since it merged or was closed while nobody looked. Close the report with a single line naming the report you compared against, or "first triage on record" when there is none. Two limits: never restate the old report, and never carry a claim from it forward. Every PR and alert in today's report is verified against `gh` in this run (Playbook "verify"); the old file dates what you find, it does not evidence it. Group by service (repo). For each service, list every open bot PR as a link, then, only if there are security alerts with no fixing PR, list those below the PRs and link to the page where they are viewed (`security_url`).
 
 Use exactly this shape per service:
 
@@ -51,4 +53,4 @@ Read-only, always. Never merge (merging is a human action, no exceptions) and ne
 
 ## Before delivering
 
-Confirm every repo in the resolved list was triaged (or its access error reported), and that alert-to-PR correlation was actually checked, not assumed (Playbook "verify"). State counts you report came from the helper output, not memory.
+Confirm every repo in the resolved list was triaged (or its access error reported), and that alert-to-PR correlation was actually checked, not assumed (Playbook "verify"). State counts you report came from the helper output, not memory. Confirm the file is dated, that you either compared against the previous triage or said there is none, and that every `new` or `open since` tag came from reading that file rather than from an impression of what was there last time.
