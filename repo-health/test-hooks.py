@@ -530,6 +530,30 @@ def test_check_output():
                 "`````\n\nWhy: AC asks to confirm.")
     check("em dash inside paste-into-PR block (fenced prose) -> BLOCK",
           co_block("keru-pr-review", em_paste))
+    # The audit's exact regression (addressing-pr-comments deliverable, PR #915): the
+    # paste block was tagged ```markdown, which routed it into _strip_code's code
+    # branch and hid three em dashes from the gate, so the file passed. A markdown/md
+    # -tagged fence in a deliverable is a paste-into-destination block (prose shipped
+    # verbatim), not a code sample, so its prose must stay checked like a bare fence.
+    em_md_paste = ("Verdict: Comment\n\n### Questions\n`config.go:55`\n\n"
+                   "Comment (paste into the PR):\n\n```markdown\n"
+                   "Thanks Logan — all fifteen verified out and applied.\n"
+                   "```\n\nWhy: AC asks to confirm.")
+    check("em dash inside ```markdown paste block (prose) -> BLOCK",
+          co_block("keru-pr-review", em_md_paste))
+    em_md_short = ("Verdict: Comment\n\n### Questions\n`config.go:55`\n\n"
+                   "Comment (paste into the PR):\n\n```md\n"
+                   "One reply — verbatim to GitHub.\n```\n\nWhy: nit.")
+    check("em dash inside ```md paste block (prose) -> BLOCK",
+          co_block("keru-pr-review", em_md_short))
+    # False-positive guard: a clean markdown paste block (no em dash) still passes,
+    # and a real code fence with an em dash is still excused (```go covered above).
+    clean_md_paste = ("Verdict: Comment\n\n### Questions\n`config.go:55`\n\n"
+                      "Comment (paste into the PR):\n\n```markdown\n"
+                      "Thanks Logan, all fifteen verified out and applied.\n"
+                      "```\n\nWhy: AC asks to confirm.")
+    check("clean ```markdown paste block -> no block",
+          not co_block("keru-pr-review", clean_md_paste))
     # A malformed-opening message is still caught on the opening first, regardless.
     check("clean deliverable, no dash -> no block",
           not co_block("keru-pr-review", "Approve\n\n### Nits\n`a.go:1`\nWhy: clean, no dash here."))

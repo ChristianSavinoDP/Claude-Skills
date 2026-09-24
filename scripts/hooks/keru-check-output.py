@@ -208,10 +208,13 @@ def _strip_code(msg):
     "Comment (paste into the PR)" block is fenced prose that goes verbatim to
     GitHub, so an em dash there is the real violation, not an exception.
 
-    A fence is treated as code only when its opening line declares a language
-    (```go, ```diff, ...). A bare fence of any length (```, `````) wraps prose
-    whose content may contain backticks, like the paste block, so it is left in
-    and its prose still checked. Parsed line by line to get fence lengths right
+    A fence is treated as code only when its opening line declares a NON-markdown
+    language (```go, ```diff, ...). A bare fence of any length (```, `````) wraps
+    prose whose content may contain backticks, like the paste block, so it is left
+    in and its prose still checked; a ```markdown / ```md fence is treated the same
+    way, since in a deliverable it is a paste-into-destination block (prose that
+    ships verbatim), not a code sample, so its prose must stay checked. Parsed line
+    by line to get fence lengths right
     (a 5-backtick close must not be matched by 3 backticks). Inline `spans` are
     always stripped (short, code)."""
     # Strip inline `spans` per line FIRST (they are short code), but never touch a
@@ -229,7 +232,12 @@ def _strip_code(msg):
         m = re.match(r"(`{3,})(.*)$", stripped)
         if fence is None and m:
             fence = m.group(1)
-            drop = bool(m.group(2).strip())   # language tag => code; bare => prose, keep
+            lang = m.group(2).strip().lower()
+            # A language tag => code, EXCEPT ```markdown/```md: in a deliverable that
+            # is a paste-into-destination block (prose shipped verbatim), not a code
+            # sample, so treat it like a bare fence and keep checking its prose. Bare
+            # fence (no tag) => prose, keep. Real code fences (```go, ```diff) drop.
+            drop = bool(lang) and lang not in ("markdown", "md")
             continue                          # never keep the delimiter line itself
         if fence is not None:
             if stripped == fence:             # close only on a same-length fence
