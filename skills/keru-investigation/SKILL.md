@@ -21,7 +21,7 @@ Read the relevant code and docs directly; track each claim back to evidence you 
 
 - **Self-contained:** readable without the ticket. The body cites code and repo artifacts only. A person's name or a quoted ticket/PR comment never appears: those are input that told you *what* to investigate, not evidence for the deliverable, which states conclusions on code you checked. When a comment raised an open question, restate the question on its own terms (no name, no quote) and answer it from the code; who raised it is irrelevant to a reader of the doc.
 - **Answer every acceptance-criteria bullet,** presented organically, not as a checklist.
-- **Open with the finding,** organized by the question being answered, with real headings a reader can scan (one heading per criterion or finding). No generic intro.
+- **Organize by the question being answered,** with real headings a reader can scan (one heading per criterion or finding).
 - **Avoid the "term - definition" pattern;** use proper sentences or sections.
 - **State each conclusion plainly** with its evidence inline or cited, not hedged.
 - **Derive each field's design implications, not just its name and type.** For a schema-shaped subject, a field is not only a label: a per-entry key (e.g. a `country` alongside a group id) changes identity, uniqueness, sort order, and hashing; a narrowed enum changes what the diff can distinguish. Ask "what does this field change about the behavior I am describing?" for each one and state that implication, not only the field's existence. A conclusion that names the fields correctly but never derives what they imply is the half-answer a reviewer sends back.
@@ -33,11 +33,11 @@ Form, verification, and placement are not this skill's job: the `keru-writing-do
 
 The document itself, nothing around it. Its first line is a markdown heading (`#` or `##`), the first finding or the question being answered: no generic intro, no "here is the investigation", no scope line, no recap of what you read before that heading.
 
-When the draft is ready, hand it to the `keru-writing-docs` skill (mode `investigation`) to verify, form, gate, and place it. Pass it:
+When the draft is ready, hand it to the `keru-writing-docs` skill (mode `investigation`). Pass it:
 
 - the drafted document,
 - its home: `docs/investigations/.../investigation.md`, matching the format you checked in "Before starting",
 - the sources every claim must be verified against (the code and repo artifacts you researched),
 - the ticket key as the id.
 
-writing-docs runs the verification (never assuming, always against the source that would disprove the claim), confirms this skill's writing rules are met (every acceptance criterion answered, self-contained with no names, any diagram matching the behavior it depicts, any recommendation following from the findings), enforces the form rules through the gated-deliverable flow (`~/.claude/keru-deliverables/keru-deliverable-investigation-<id>.md`), and writes the doc to its home. Your chat response is its link plus at most one line (a meta-comment or what to confirm), nothing else; do not paste the document into chat.
+writing-docs confirms this skill's writing rules are met (any diagram matching the behavior it depicts, any recommendation following from the findings) and gates and places it (`~/.claude/keru-deliverables/keru-deliverable-investigation-<id>.md`). Your chat response is its link plus at most one line (a meta-comment or what to confirm), nothing else; do not paste the document into chat.

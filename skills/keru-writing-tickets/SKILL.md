@@ -14,7 +14,7 @@ Procedure for drafting tickets. The Playbook's rules apply (concise, no slop, ne
 
 ## A ticket is what + why, not how
 
-The implementer decides how. Length is a defect: a reader should grasp the whole ticket in one scan.
+Length is a defect: a reader should grasp the whole ticket in one scan.
 
 - **Title:** one line, the outcome. Not sub-tasks joined by "and".
 - **Context:** 2 to 4 sentences stating the problem and the goal, not a point-by-point diff against a reference. Naming a reference to mirror is fine ("mirror the `X` setup"); keep the contrast between the two in the criteria, where it is checkable. Link the source ticket/investigation, do not restate it.
@@ -22,7 +22,7 @@ The implementer decides how. Length is a defect: a reader should grasp the whole
 - **Wrap identifiers in inline `code`:** repo names, package names, versions, and literal values (`null`, `high`, `0.7.19`) go in backticks, in the context and the criteria alike. Jira renders it, and it makes the ticket scannable instead of a flat wall of prose. Ground the context in concrete numbers from the source (counts, versions) rather than vague quantities.
 - **Past ~6 to 7 criteria it is probably several tickets:** split, do not grow one.
 - **The unit of a split is a deliverable, not an implementation step.** Over-splitting is the easier mistake to make and the harder one to see, because two implementation steps always *sound* like two tickets ("do the migration", "make the gate visible") while being one change to one handler that ships in one PR. Before proposing N tickets, check each one: could a different person pick it up, in any order, and close it on its own? If two pieces cannot ship or be verified separately, they are one ticket, and splitting them only buys coordination cost. Say what the split is for (parallel owners, separate releases, different services) or do not split.
-- Add value with sharper criteria, not more words: flag a missing criterion or an unstated assumption.
+- Add value: flag a missing criterion or an unstated assumption.
 
 For a bug, give observed vs expected in the paragraph. An investigation's criteria are the questions to answer, not a solution. A task breakdown lists sub-tickets, each one line with short criteria.
 

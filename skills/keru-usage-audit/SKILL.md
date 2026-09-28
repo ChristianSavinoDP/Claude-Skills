@@ -21,7 +21,7 @@ Answer "what did this cost, and why" from the local transcripts. Read-only: `ker
 3. **State both caveats, every time.** They change how the number should be read:
    - It is an **estimate**: first-party list prices applied to recorded tokens. On Bedrock or Vertex the provider's rates apply, so the invoice differs.
    - It is a **floor**: a hook that calls a headless model with `--no-session-persistence` leaves no transcript, so its spend is not in the total.
-4. **Say what is driving it**, from the numbers rather than from assumption. The pools, in the order they usually rank: cache reads (context re-sent every turn), cache writes (context newly cached), output (thinking tokens live here). If the user wants the split by pool, or spend attributed to subagents versus main sessions, compute it from the JSON.
+4. **Say what is driving it**, from the numbers rather than from assumption. The pools, in the order they usually rank: cache reads, cache writes (context newly cached), output (thinking tokens live here). If the user wants the split by pool, or spend attributed to subagents versus main sessions, compute it from the JSON.
 
 ## Reading the numbers
 
@@ -32,6 +32,4 @@ Answer "what did this cost, and why" from the local transcripts. Read-only: `ker
 
 - **A gate with no row in `blocks` never blocked in that scope.** Absence is the finding: it means that gate is not the reason anything was redone, so a rework argument cannot lean on it.
 
-Before recommending any change, measure the lever you are about to recommend on this data. A cheaper cache TTL, a lower effort level, or a cheaper model for a leg each trade something; quote what it saves here rather than what it saves in general.
-
-When the change trades quality for cost, weigh it against `blocks` for the same period and say the break-even out loud (how much extra rework would cancel the saving). And say what that comparison cannot see: the gates check form and skill compliance, not whether a root cause was right or a review caught the real bug. A quality regression that never trips a gate will not appear in these numbers, so a cost win here is not by itself evidence that quality held.
+Before recommending any change, measure the lever you are about to recommend on this data. A cheaper cache TTL, a lower effort level, or a cheaper model for a leg each trade something; quote what it saves here rather than what it saves in general. When the change trades quality for cost, also weigh it against `blocks` for the same period and say the break-even out loud (how much extra rework would cancel the saving). And say what that comparison cannot see: the gates check form and skill compliance, not whether a root cause was right or a review caught the real bug. A quality regression that never trips a gate will not appear in these numbers, so a cost win here is not by itself evidence that quality held.

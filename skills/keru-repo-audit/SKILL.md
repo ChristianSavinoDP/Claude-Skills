@@ -5,7 +5,7 @@ description: Show, per repo, what switching to the default branch and fast-forwa
 
 # Repo Audit
 
-Show what `/keru-repo-update` would do across the projects root, without doing it. Read-only: this does a `git fetch --prune` per repo (never mutates the remote) and reports state; it switches no branch and pulls nothing. The Playbook's always-on rules apply (verify, read-only for external systems); this skill adds the audit procedure.
+Show what `/keru-repo-update` would do across the projects root, without doing it. Read-only: this never mutates the remote and reports state; it switches no branch and pulls nothing. The Playbook's always-on rules apply (verify, read-only for external systems); this skill adds the audit procedure.
 
 ## Procedure
 
@@ -17,4 +17,4 @@ Show what `/keru-repo-update` would do across the projects root, without doing i
    - **Will be skipped**: `ff_status` is `diverged` (local commits origin lacks, so `--ff-only` can't apply) or `no-origin`. Name why.
    - Say "already up to date" for repos on their default with `ff_status` `up-to-date`.
 
-The pull `/keru-repo-update` runs is always `--ff-only` (that command owns the safety model), so a diverged repo is reported here and left untouched rather than force-merged. This audit is the chance to eyeball the list before running `/keru-repo-update`. Nothing is changed here.
+The pull `/keru-repo-update` runs is always `--ff-only` (that command owns the safety model), so a diverged repo is reported here and left untouched rather than force-merged.

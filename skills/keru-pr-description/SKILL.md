@@ -13,12 +13,12 @@ Default: the PR does NOT exist yet. You are describing work already finished on 
 
 ## Steps
 
-1. Get the ticket first (Playbook "first step"): you need the JIRA ID and acceptance criteria. Use the `keru-gather-context` skill to gather the ticket and chain (and, only if a PR link/number was given, that PR's diff and branch). If you lack the ticket, ask for it, never for a PR.
+1. Get the ticket first (Playbook "first step"): you need the JIRA ID and acceptance criteria. Use the `keru-gather-context` skill to gather the ticket and chain (and that PR's diff and branch, if one was given). If you lack the ticket, ask for it, never for a PR.
 2. Read the repo's template `.github/PULL_REQUEST_TEMPLATE.md` and fill in its sections. Do not invent your own structure. No template: keep it minimal (what changed, how to test if relevant).
 3. Describe the real changes, not the theory, drawing on what is already known in this order:
    - **What was done in this session.** If the change was just made here, you already know it: the files touched, why, and how. Use that first; do not reconstruct it from scratch.
    - **The ticket and the changed/added files themselves.** Read the modified or new files for the real behavior.
-   - **`git diff` / `gh pr diff`** to confirm and fill gaps: no PR yet (the default), diff the branch against its base (`git diff <base>...` or `git diff main`); a PR was given, `gh pr diff <pr>`. Use this to verify the description matches the actual code, not as the only source.
+   - **`git diff` / `gh pr diff`** to confirm and fill gaps: no PR yet, diff the branch against its base (`git diff <base>...` or `git diff main`); a PR was given, `gh pr diff <pr>`. Use this to verify the description matches the actual code, not as the only source.
 
 ## Rules
 
@@ -31,7 +31,7 @@ Default: the PR does NOT exist yet. You are describing work already finished on 
 
 ## Who reads it, and how long it is
 
-A reviewer opens the PR to decide one thing: whether this change is right to merge. They need the shape of the change, the one line reason it takes that shape, and whatever will break them. Everything else taxes the attention that decision needs, so the body gets cut by relevance, never compressed (the Playbook's two tests: does the reviewer decide differently without this sentence, and would a colleague say it in this many words). Scale it to the change: a focused diff is a few sentences per template section, and prose that outweighs the contract it describes is over-explaining.
+A reviewer opens the PR to decide one thing: whether this change is right to merge. They need the shape of the change, the one line reason it takes that shape, and whatever will break them. Everything else taxes the attention that decision needs, so the body gets cut by relevance, never compressed (the Playbook's two tests: does the reviewer decide differently without this sentence, and would a colleague say it in this many words). Scale it to the change: a focused diff is a few sentences per template section.
 
 - **Do not restate the diff.** A bullet per changed field or file, paraphrasing what the reviewer is about to read, adds nothing. Name the shape that changed and stop: "`OnboardingTarget` is gone and field 2 is reserved" is the sentence; an inventory of the lines around it is not.
 - **Do not explain the repo's own tooling or process back to the repo.** Codegen, lint, the lockfile hunk generation rewrites, how the pipeline runs: every reader of this PR already knows. Regenerating is one word, "Regenerated", not a paragraph.
