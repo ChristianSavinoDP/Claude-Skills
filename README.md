@@ -61,7 +61,7 @@ Edit an always-on rule in [`playbook/PLAYBOOK.md`](playbook/PLAYBOOK.md); edit a
 - [getting-started.md](docs/getting-started.md): install, tool login, verify.
 - [playbook.md](docs/playbook.md): the rules, and how they load into every session.
 - [skills.md](docs/skills.md): how skills trigger, how to invoke them as `/keru-*`, and the catalogue.
-- [permissions.md](docs/permissions.md): the permission model and the hooks (the Bash command gate with its fast static path and model fallback, the deliverable-write gate, the WebFetch and inline-interpreter blocks, the Stop gates, and the SessionStart drift check).
+- [permissions.md](docs/permissions.md): the permission model and the hooks (the Bash command gate with its fast static path and model fallback, the deliverable-write and code-comment gates, the WebFetch and inline-interpreter blocks, the Stop gates, and the SessionStart drift check).
 - [external-tools.md](docs/external-tools.md): `gh`, `jira`, and `pup` (DataDog) setup, and how context is gathered.
 - [architecture.md](docs/architecture.md): the single-source-of-truth design.
 - [memory.md](docs/memory.md): what belongs in memory vs. in the repo.

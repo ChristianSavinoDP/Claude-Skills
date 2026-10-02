@@ -274,8 +274,9 @@ PY
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-check-output.py" "$BIN_DIR/keru-check-output"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-judge-output.py" "$BIN_DIR/keru-judge-output"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-gate-deliverable.py" "$BIN_DIR/keru-gate-deliverable"
+  install -m 0755 "$REPO_DIR/scripts/hooks/keru-gate-comments.py" "$BIN_DIR/keru-gate-comments"
   install -m 0755 "$REPO_DIR/scripts/hooks/keru-check-drift.py" "$BIN_DIR/keru-check-drift"
-  echo "installed: keru-jira-dev, keru-jira-set-components, keru-bot-triage, keru-branch-cleanup, keru-repo-update, keru-cache-clean, keru-artifacts-prune, keru-usage, keru-context-snapshot, keru-session-brief, keru-claude-update, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill, keru-check-output, keru-judge-output, keru-gate-deliverable, keru-check-drift in $BIN_DIR"
+  echo "installed: keru-jira-dev, keru-jira-set-components, keru-bot-triage, keru-branch-cleanup, keru-repo-update, keru-cache-clean, keru-artifacts-prune, keru-usage, keru-context-snapshot, keru-session-brief, keru-claude-update, keru-safe-read, keru-block-webfetch, keru-block-inline-interp, keru-require-skill, keru-check-output, keru-judge-output, keru-gate-deliverable, keru-gate-comments, keru-check-drift in $BIN_DIR"
   ensure_on_path
 }
 

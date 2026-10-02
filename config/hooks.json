@@ -51,6 +51,11 @@
             "type": "command",
             "command": "~/.local/bin/keru-gate-deliverable",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "~/.local/bin/keru-gate-comments",
+            "timeout": 10
           }
         ]
       },

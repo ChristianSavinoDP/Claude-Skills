@@ -131,6 +131,10 @@ def load_turn(transcript_path):
         # output. Only genuine prompts (isMeta absent/false) count.
         if r.get("isMeta"):
             continue
+        # A subagent's completion notice arrives as a user record too, with its
+        # report as the text, and a report naming a skill must not read as a request.
+        if ((r.get("origin") or {}).get("kind") == "task-notification"):
+            continue
         content = (r.get("message") or {}).get("content")
         text = ""
         if isinstance(content, str):

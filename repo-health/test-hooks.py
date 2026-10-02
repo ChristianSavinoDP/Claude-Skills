@@ -12,10 +12,12 @@ Tests target the scripts in scripts/ (the source of truth), not the installed
 """
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOOKS = os.path.join(REPO, "scripts", "hooks")
@@ -24,6 +26,7 @@ REQUIRE_SKILL = os.path.join(HOOKS, "keru-require-skill.py")
 CHECK_OUTPUT = os.path.join(HOOKS, "keru-check-output.py")
 JUDGE_OUTPUT = os.path.join(HOOKS, "keru-judge-output.py")
 GATE = os.path.join(HOOKS, "keru-gate-deliverable.py")
+GATE_COMMENTS = os.path.join(HOOKS, "keru-gate-comments.py")
 CHECK_DRIFT = os.path.join(HOOKS, "keru-check-drift.py")
 BLOCK_INLINE = os.path.join(HOOKS, "keru-block-inline-interp.py")
 
@@ -311,6 +314,12 @@ def test_require_skill():
           not rs_block(slash, ["keru-gather-context"]))
     check("bare /keru-* line satisfies",
           not rs_block("/keru-addressing-pr-comments\nhandle these", []))
+    notice = {"type": "user", "origin": {"kind": "task-notification"},
+              "message": {"content": "<task-notification>Use the keru-addressing-pr-comments "
+                                     "skill for this.</task-notification>"}}
+    check("a subagent notification naming a skill is not the user's request",
+          not rs_block("<command-name>/keru-writing-code</command-name>\nsigue", [],
+                       trailing=[notice]))
     # Namespace: invoked keru-pr-review satisfies a requested pr-review.
     check("keru- wrapper invocation satisfies bare request",
           not rs_block("use the pr review skill", ["keru-pr-review"]))
@@ -1199,12 +1208,382 @@ def test_turn_deliverable():
     shutil.rmtree(tmpd, ignore_errors=True)
 
 
+def comments_run(payload):
+    """(decision, reason, ok) for one raw payload; ok is False when the hook crashed
+    (non-zero exit or stderr), so a crash can never pass as an allow."""
+    p = subprocess.run([sys.executable, GATE_COMMENTS], input=payload,
+                       capture_output=True, text=True)
+    ok = p.returncode == 0 and not p.stderr.strip()
+    out = p.stdout.strip()
+    if not out:
+        return "", "", ok
+    try:
+        h = json.loads(out)["hookSpecificOutput"]
+        return h.get("permissionDecision", ""), h.get("permissionDecisionReason", ""), ok
+    except Exception:
+        return "", "", False
+
+
+def comments_verdict(file_path, tool="Write", content=None, old=None, new=None, replace_all=False):
+    if tool == "Write":
+        ti = {"file_path": file_path, "content": content}
+    else:
+        ti = {"file_path": file_path, "old_string": old, "new_string": new}
+        if replace_all:
+            ti["replace_all"] = True
+    return comments_run(json.dumps({"tool_name": tool, "tool_input": ti}))
+
+
+def test_comment_gate():
+    tmpd = tempfile.mkdtemp()
+    try:
+        _comment_gate_cases(tmpd)
+    finally:
+        shutil.rmtree(tmpd, ignore_errors=True)
+
+
+def _comment_gate_cases(tmpd):
+    go = os.path.join(tmpd, "svc", "drift.go")
+    py = os.path.join(tmpd, "a.py")
+    REF, BLOCK, TOTAL = "ticket or PR reference", "comment block of", "new comment lines in one edit"
+
+    def denied_for(rule, **kw):
+        d, reason, ok = comments_verdict(**kw)
+        return ok and d == "deny" and rule in reason
+
+    def allowed(**kw):
+        d, _, ok = comments_verdict(**kw)
+        return ok and d == ""
+
+    def pkg(body):
+        return "package x\n\n" + body
+
+    check("comments: ticket key in a Go comment -> deny",
+          denied_for(REF, file_path=go, content=pkg("// retired by DBI-1820\nfunc f() {}\n")))
+    check("comments: repo and PR number in a trailing Go comment -> deny",
+          denied_for(REF, file_path=go, content=pkg("var v = 1 // see dp-protos #2237\n")))
+    check("comments: ticket in a Python comment -> deny",
+          denied_for(REF, file_path=py, content="# NEXUS-1160 retired it\nx = 1\n"))
+    check("comments: ticket in a trailing Python comment -> deny",
+          denied_for(REF, file_path=py, content="x = 1  # DBI-7 workaround\n"))
+    check("comments: PR ref in a terraform comment -> deny",
+          denied_for(REF, file_path=os.path.join(tmpd, "main.tf"), content="# per PR #2237\nlocals {}\n"))
+    check("comments: ticket in a SQL comment -> deny",
+          denied_for(REF, file_path=os.path.join(tmpd, "q.sql"), content="-- DBI-1820 backfill\nselect 1;\n"))
+    check("comments: ticket in a trailing block comment -> deny",
+          denied_for(REF, file_path=go, content=pkg("var v = 1 /* DBI-1820 */\n")))
+    for ref in ("org/repo#12", "https://github.com/o/r/pull/12", "https://x.atlassian.net/browse/DBI-1"):
+        check("comments: %s in a comment -> deny" % ref,
+              denied_for(REF, file_path=go, content=pkg("// see %s\nfunc f() {}\n" % ref)))
+    check("comments: ticket in a Makefile comment -> deny",
+          denied_for(REF, file_path=os.path.join(tmpd, "Makefile"), content="# DBI-9 target\nall:\n"))
+    check("comments: ticket in a Python docstring -> deny",
+          denied_for(REF, file_path=py, content='def f():\n    """Retired by DBI-1820."""\n    return 1\n'))
+    check("comments: standards, licenses and encodings are not tickets -> allow",
+          allowed(file_path=go, content=pkg("// UTF-8, SHA-256, CWE-89, CP-1252, GPL-3.0, X86-64.\nfunc f() {}\n")))
+    check("comments: an ordinal, a color and an RFC section are not PR refs -> allow",
+          allowed(file_path=go, content=pkg("// step #10, color #666666, rfc7519#4\nfunc f() {}\n")))
+    check("comments: a ticket inside a terraform string -> allow",
+          allowed(file_path=os.path.join(tmpd, "m.tf"),
+                  content='module "a" {\n  source = "git::https://github.com/o/r//modules/x?ref=DBI-1820-fix"\n}\n'))
+    check("comments: a ticket inside a YAML string -> allow",
+          allowed(file_path=os.path.join(tmpd, "r.yml"), content='title: "Release #12 for DBI-1"\n'))
+    with_ref = "var v = 1 // MIMO-4422\n"
+    check("comments: changing code on a line that already carries a ref -> allow",
+          allowed(file_path=go, tool="Edit", old=with_ref, new=with_ref.replace("1", "2")))
+    check("comments: fixing a typo in a comment that already carries a ref -> allow",
+          allowed(file_path=go, tool="Edit", old="// the schema (MIMO-4422) so logins are queriable\n",
+                  new="// the schema (MIMO-4422) so logins are queryable\n"))
+
+    check("comments: a 3-line // block -> deny",
+          denied_for(BLOCK, file_path=go, content=pkg("// one\n// two\n// three\nfunc f() {}\n")))
+    check("comments: a /* */ block with 3 text lines -> deny",
+          denied_for(BLOCK, file_path=go, content=pkg("/* one\n   two\n   three */\nfunc f() {}\n")))
+    check("comments: a 3-line Python docstring -> deny",
+          denied_for(BLOCK, file_path=py, content='def f():\n    """One.\n\n    Two.\n    Three.\n    """\n    return 1\n'))
+    check("comments: a 2-line why -> allow",
+          allowed(file_path=go, content=pkg("// Ties break on the encoded bytes, so\n// the order is stable across polls.\nfunc f() {}\n")))
+    check("comments: a one-sentence JSDoc block -> allow",
+          allowed(file_path=os.path.join(tmpd, "a.ts"), content="/**\n * Returns the thing.\n */\nexport function f() {}\n"))
+    block = "// one\n// two\n// three\n// four\n"
+    check("comments: an Edit that keeps an existing block -> allow",
+          allowed(file_path=go, tool="Edit", old=block + "func f() {}", new=block + "func g() {}"))
+    check("comments: an Edit fixing one line of an existing block -> allow",
+          allowed(file_path=go, tool="Edit", old=block, new=block.replace("two", "2")))
+    check("comments: an Edit rewording an existing block in place -> allow",
+          allowed(file_path=go, tool="Edit", old=block, new=block.replace("o", "0")))
+    check("comments: an Edit adding 3 lines to an existing block -> deny",
+          denied_for(BLOCK, file_path=go, tool="Edit", old=block, new=block + "// five\n// six\n// seven\n"))
+    check("comments: an Edit growing a 2-line comment to 3 -> deny",
+          denied_for(BLOCK, file_path=go, tool="Edit", old="// one\n// two\nfunc f() {}",
+                     new="// one\n// two\n// three\nfunc f() {}"))
+    check("comments: an Edit fragment that starts inside a /* */ block is still read -> deny",
+          denied_for(BLOCK, file_path=go, tool="Edit", old=" * Returns x.\n */",
+                     new=" * Returns x.\n * Retired soon.\n * Really.\n * Truly.\n */"))
+
+    six = pkg("".join("// c%d\nfunc f%d() {}\n" % (i, i) for i in range(6)))
+    check("comments: 6 one-line comments in one write -> deny", denied_for(TOTAL, file_path=go, content=six))
+    five = pkg("".join("// c%d\nfunc f%d() {}\n" % (i, i) for i in range(5)))
+    check("comments: exactly 5 one-line comments -> allow", allowed(file_path=go, content=five))
+    trailing = pkg("".join("var a%d = 1 // t%d\n" % (i, i) for i in range(6)))
+    check("comments: trailing comments count toward the total -> deny",
+          denied_for(TOTAL, file_path=go, content=trailing))
+    existing = os.path.join(tmpd, "keep.go")
+    with open(existing, "w") as f:
+        f.write(pkg("// a\n// b\n// c\n// d\nfunc f() {}\n"))
+    check("comments: a Write that keeps the existing comments -> allow",
+          allowed(file_path=existing, content=pkg("// a\n// b\n// c\n// d\nfunc g() {}\n")))
+    check("comments: a Write over an existing file that adds a ref -> deny",
+          denied_for(REF, file_path=existing, content=pkg("// a\n// b\n// c\n// d\n// DBI-1\nfunc g() {}\n")))
+    rpath = os.path.join(tmpd, "r.go")
+    with open(rpath, "w") as f:
+        f.write("package x\n" + "x()\n" * 6)
+    check("comments: replace_all counts every occurrence -> deny",
+          denied_for(TOTAL, file_path=rpath, tool="Edit", old="x()", new="x() // why", replace_all=True))
+
+    check("comments: adjacent Go directives -> allow",
+          allowed(file_path=go, content="//go:build linux\n// +build linux\n//go:generate x\n\npackage x\n\n//nolint:gocyclo\nfunc f() {}\n"))
+    check("comments: adjacent Python pragmas -> allow",
+          allowed(file_path=py, content="# noqa\n# pylint: disable=all\n# mypy: ignore-errors\nx = 1\n"))
+    check("comments: block-form eslint pragmas -> allow",
+          allowed(file_path=os.path.join(tmpd, "a.js"),
+                  content="/* eslint-disable */\n/* eslint-disable no-x */\n/* istanbul ignore file */\nf()\n"))
+    sqlc = "".join("-- name: Q%d :one\nselect %d;\n\n" % (i, i) for i in range(6))
+    check("comments: sqlc query annotations -> allow", allowed(file_path=os.path.join(tmpd, "q.sql"), content=sqlc))
+    check("comments: goose migration markers -> allow",
+          allowed(file_path=os.path.join(tmpd, "m.sql"),
+                  content="-- +goose Up\n-- +goose StatementBegin\nselect 1;\n-- +goose StatementEnd\n"
+                          "-- +goose Down\n-- +goose StatementBegin\nselect 2;\n-- +goose StatementEnd\n"))
+    check("comments: a Go example Output block in a test file -> allow",
+          allowed(file_path=os.path.join(tmpd, "svc", "x_test.go"),
+                  content=pkg("func ExampleF() {\n\tf()\n\t// Output:\n\t// a\n\t// b\n\t// c\n}\n")))
+    check("comments: Output: prose outside a test file still counts -> deny",
+          denied_for(BLOCK, file_path=go, content=pkg("// Output: the result\n// a\n// b\nfunc f() {}\n")))
+    check("comments: # lines in a Python triple-quoted string -> allow",
+          allowed(file_path=py, content='NOTES = """\n# Release\n## Fixed\n## Added\n"""\n'))
+    check("comments: # lines in a shell heredoc -> allow",
+          allowed(file_path=os.path.join(tmpd, "s.sh"), content="cat <<'EOF' > f\n# a\n# b\n# c\nEOF\n"))
+    check("comments: ### lines in a YAML block scalar -> allow",
+          allowed(file_path=os.path.join(tmpd, "f.yml"),
+                  content="body:\n  value: |\n    ### Steps\n    ### Expected\n    ### Actual\n"))
+    check("comments: a version pin after a YAML action -> allow",
+          allowed(file_path=os.path.join(tmpd, "ci.yml"), content="steps:\n  - uses: actions/checkout@abc123 # v4.1.1\n"))
+
+    check("comments: a markdown file is out of scope -> allow",
+          allowed(file_path=os.path.join(tmpd, "README.md"), content="# Rollout DBI-1820\n# a\n# b\n"))
+    check("comments: generated code is out of scope -> allow",
+          allowed(file_path=os.path.join(tmpd, "x.pb.go"), content="// DBI-1\n// a\n// b\n"))
+    check("comments: vendored code is out of scope -> allow",
+          allowed(file_path=os.path.join(tmpd, "vendor", "y.go"), content="// DBI-1\n"))
+    check("comments: a task breakdown under docs/ is out of scope -> allow",
+          allowed(file_path=os.path.join(tmpd, "docs", "inv", "task-breakdown.yaml"),
+                  content="# Tickets from the DBI-1390 investigation\n# a\n# b\nitems: []\n"))
+    half = os.path.join(tmpd, "half-repo")
+    os.makedirs(os.path.join(half, "playbook"))
+    open(os.path.join(half, "playbook", "PLAYBOOK.md"), "w").close()
+    check("comments: a repo with only a playbook is not exempt -> deny",
+          denied_for(REF, file_path=os.path.join(half, "h.py"), content="# DBI-1669\nx = 1\n"))
+    skills = os.path.join(tmpd, "skills-repo")
+    os.makedirs(os.path.join(skills, "playbook"))
+    os.makedirs(os.path.join(skills, "scripts", "hooks"))
+    open(os.path.join(skills, "playbook", "PLAYBOOK.md"), "w").close()
+    open(os.path.join(skills, "scripts", "hooks", "keru-gate-comments.py"), "w").close()
+    check("comments: the Claude-Skills repo itself is out of scope -> allow",
+          allowed(file_path=os.path.join(skills, "scripts", "hooks", "h.py"),
+                  content="# DBI-1669 was snapshotted\n# a\n# b\nx = 1\n"))
+
+    three_hash = "# one\n# two\n# three\n"
+    code_after_doc = '    """\n    cur.execute(q)\n    row = cur.fetchone()\n    if not row:\n        return None\n    return row\n'
+    check("comments: an Edit starting on a docstring's closing quotes, adding code -> allow",
+          allowed(file_path=py, tool="Edit", old='    """\n    return cur.fetchone()\n', new=code_after_doc))
+    check("comments: SQL in a triple-quoted string argument -> allow",
+          allowed(file_path=py, content='cur.execute(\n    """\n    SELECT id\n    FROM users\n    WHERE active\n    """\n)\n'))
+    reword_old = "// It is fast.\n// It is safe.\n// It is quick.\nfunc f() {}\nfunc g() {}\n"
+    check("comments: rewording a block and adding one line elsewhere -> allow",
+          allowed(file_path=go, tool="Edit", old=reword_old,
+                  new=reword_old.replace("safe", "sound").replace("func g() {}", "// why g\nfunc g() {}")))
+    moved_old = "func a() {}\n" + "".join("// old %d\n" % i for i in range(4)) + "func b() {}\n" + "func c() {}\n" * 3 + "func d() {}\n"
+    moved_new = "func a() {}\n" + "func b() {}\n" + "func c() {}\n" * 3 + "".join("// new %d\n" % i for i in range(4)) + "func d() {}\n"
+    check("comments: deleting a block does not buy a new one elsewhere -> deny",
+          denied_for(BLOCK, file_path=go, tool="Edit", old=moved_old, new=moved_new))
+    check("comments: a lone backtick in a trailing comment does not hide later comments -> deny",
+          denied_for(BLOCK, file_path=go, content=pkg("var q = 1 // the ` char\n\n// one\n// two\n// three\nfunc f() {}\n")))
+    for opener in ("tr a b <<< hello", "x=$(( 1<<n ))", 'echo "use <<EOF here"'):
+        check("comments: %r is not a heredoc -> deny the later block" % opener,
+              denied_for(BLOCK, file_path=os.path.join(tmpd, "s.sh"), content=opener + "\n\n" + three_hash + "echo done\n"))
+    check("comments: triple quotes inside a Python comment open nothing -> deny the later block",
+          denied_for(BLOCK, file_path=py, content='x = 1  # strip """ here\n\n' + three_hash + "y = 2\n"))
+    check("comments: a YAML block scalar ends at its content's indent -> deny the step's block",
+          denied_for(BLOCK, file_path=os.path.join(tmpd, "w.yml"),
+                     content="steps:\n  - run: |\n      echo hi\n    # one\n    # two\n    # three\n    env: {}\n"))
+    check("comments: # lines in a Dockerfile RUN heredoc -> allow",
+          allowed(file_path=os.path.join(tmpd, "Dockerfile"), content="FROM x\nRUN <<EOF\n# a\n# b\n# c\nEOF\n"))
+    check("comments: an anchored YAML block scalar -> allow",
+          allowed(file_path=os.path.join(tmpd, "a.yml"), content="key: &a |\n  # a\n  # b\n  # c\n"))
+    check("comments: SQL continuation lines starting with * -> allow",
+          allowed(file_path=os.path.join(tmpd, "p.sql"),
+                  content="select a\n  * 100.0 / total as pct,\n  * 2 as b,\n  * 3 as c\nfrom t;\n"))
+    check("comments: self-documenting Makefile targets -> allow",
+          allowed(file_path=os.path.join(tmpd, "Makefile"),
+                  content="".join("t%d: ## help for t%d\n\techo\n" % (i, i) for i in range(6))))
+    check("comments: a JS regex with escaped slashes is not a comment -> allow",
+          allowed(file_path=os.path.join(tmpd, "r.js"), content="const r = /^https?:\\/\\/DBI-1/\n"))
+    check("comments: a quoted ref inside a trailing comment -> deny",
+          denied_for(REF, file_path=py, content='x = 1  # see "DBI-1820"\n'))
+    check("comments: a ref after a pragma -> deny",
+          denied_for(REF, file_path=go, content=pkg("var v = f() //nolint:errcheck // DBI-1820\n")))
+    check("comments: reflowing a ref onto one line -> allow",
+          allowed(file_path=go, tool="Edit", old="// see dp-protos\n// #2237 for it\n", new="// see dp-protos #2237 for it\n"))
+    check("comments: a ref is matched exactly, not as a substring -> deny",
+          denied_for(REF, file_path=go, tool="Edit", old="// DBI-18200\n", new="// DBI-18200\n// DBI-1820\n"))
+    check("comments: hyphenated words before #NN or a 6-digit color are not PR refs -> allow",
+          allowed(file_path=go, content=pkg("// re-run #10, light-gray #666666\nfunc f() {}\n")))
+    check("comments: a multi-line JSDoc starting with a tag still counts -> deny",
+          denied_for(BLOCK, file_path=os.path.join(tmpd, "d.ts"),
+                     content="/** @deprecated\n * one\n * two\n * three\n */\nexport const x = 1\n"))
+    check("comments: a block comment opened after code is tracked -> deny",
+          denied_for(BLOCK, file_path=go, content=pkg("var v = 1 /* one\n two\n three\n four */\n")))
+    for line in ('"\\' * 50000, "-".join(["a"] * 30000) + " x", "AB-1" * 20000, "1" * 20000):
+        t0 = time.time()
+        _, _, ok = comments_verdict(file_path=go, content=pkg("// " + line + "\nfunc f() {}\n"))
+        check("comments: a pathological %d-char line finishes fast" % len(line), ok and time.time() - t0 < 3)
+
+    for raw in ("not json", "[]", '{"tool_name":"Write","tool_input":"x"}',
+                '{"tool_name":"Write","tool_input":{"file_path":7,"content":"x"}}',
+                '{"tool_name":"Edit","tool_input":{"file_path":"/a/b.go","old_string":1,"new_string":"// DBI-1"}}'):
+        d, _, ok = comments_run(raw)
+        check("comments: malformed input %s fails open without crashing" % raw[:32], ok and d == "")
+
+
+def test_not_tickets_in_sync():
+    from importlib.machinery import SourceFileLoader
+    gate = SourceFileLoader("keru_gate_comments", GATE_COMMENTS).load_module()
+    with open(os.path.join(REPO, "scripts", "helpers", "keru-context-snapshot.sh")) as f:
+        m = re.search(r"^NOT_TICKETS_JQ='(\[.*\])'$", f.read(), re.M)
+    check("not-tickets: the comment gate and the snapshot skip the same prefixes",
+          bool(m) and set(json.loads(m.group(1))) == gate.NOT_TICKETS)
+
+
+def test_context_snapshot():
+    jq_bin = shutil.which("jq")
+    if not jq_bin:
+        check("snapshot: jq available for the snapshot test", False)
+        return
+    tmpd = tempfile.mkdtemp()
+    try:
+        _context_snapshot_cases(tmpd, jq_bin)
+    finally:
+        shutil.rmtree(tmpd, ignore_errors=True)
+
+
+def _context_snapshot_cases(tmpd, jq_bin):
+    fix, bindir, cfg = (os.path.join(tmpd, d) for d in ("fix", "bin", "cfg"))
+    for d in (fix, bindir):
+        os.makedirs(d)
+
+    def text(t, marks=None):
+        node = {"type": "text", "text": t}
+        if marks:
+            node["marks"] = marks
+        return node
+
+    def para(*nodes):
+        return {"type": "paragraph", "content": list(nodes)}
+
+    def doc(*blocks):
+        return {"type": "doc", "version": 1, "content": list(blocks)}
+
+    def issue(key, itype, desc, comments=(), links=()):
+        return {"key": key, "fields": {
+            "summary": key + " summary", "issuetype": {"name": itype}, "status": {"name": "Open"},
+            "updated": "2026-01-01T00:00:00.000+0000", "description": desc,
+            "comment": {"comments": [{"author": {"displayName": "A"}, "created": "2026-01-01",
+                                      "body": c} for c in comments]},
+            "issuelinks": list(links)}}
+
+    root = issue("ROOT-1", "Task", doc(
+        {"type": "heading", "attrs": {"level": 2}, "content": [text("Heading")]},
+        para(text("Uses "), text("handler.go", [{"type": "code"}]), text(" and "),
+             text("docs", [{"type": "link", "attrs": {"href": "https://example.com/d"}}]),
+             text(", see INV-9, UTF-8 and SHA-256.")),
+        {"type": "bulletList", "content": [{"type": "listItem", "content": [para(text("item"))]}]},
+        {"type": "table", "content": [
+            {"type": "tableRow", "content": [{"type": "tableHeader", "content": [para(text("a|b"))]}]},
+            {"type": "tableRow", "content": [{"type": "tableCell", "content": [para(text("1"))]}]}]}),
+        comments=[doc(para(text("root comment")))],
+        links=[{"type": {"inward": "is blocked by", "outward": "blocks"}, "outwardIssue": {"key": "ROOT-2"}}])
+    linked = issue("ROOT-2", "Task", doc(para(text("linked body"))),
+                   comments=[doc(para(text("linked comment names NOPE-5")))])
+    inv = issue("INV-9", "Investigation", doc(para(text("why"))))
+    for i in (root, linked, inv):
+        with open(os.path.join(fix, i["key"] + ".json"), "w") as f:
+            json.dump(i, f)
+    with open(os.path.join(bindir, "jira"), "w") as f:
+        f.write('#!/bin/sh\n[ -f "%s/$3.json" ] && exec cat "%s/$3.json"\necho "not found"\n' % (fix, fix))
+    os.chmod(os.path.join(bindir, "jira"), 0o755)
+
+    env = dict(os.environ)
+    env.update(PATH=":".join([bindir, os.path.dirname(jq_bin), "/usr/bin", "/bin"]), CLAUDE_CONFIG_DIR=cfg)
+    script = os.path.join(REPO, "scripts", "helpers", "keru-context-snapshot.sh")
+
+    def run(mode, key="ROOT-1"):
+        p = subprocess.run(["bash", script, mode, key], capture_output=True, text=True, env=env)
+        try:
+            return p.returncode, json.loads(p.stdout)
+        except ValueError:
+            return p.returncode, {}
+
+    code, out = run("write")
+    check("snapshot: write succeeds", code == 0 and out.get("root") == "ROOT-1")
+    check("snapshot: a mentioned investigation is found and standards are skipped",
+          out.get("investigations") == ["INV-9"] and out.get("mentioned_keys") == ["INV-9"])
+    path = os.path.join(cfg, "keru-context", "ROOT-1.md")
+    body = open(path).read() if os.path.isfile(path) else ""
+    lines = body.splitlines()
+    mark_ok = "keru-validate-->" in lines and lines[lines.index("keru-validate-->") + 1] == "<!--keru-format: 2-->"
+    check("snapshot: the format mark follows the header", mark_ok)
+    for needle, what in (("**Heading**", "a heading renders bold"), ("`handler.go`", "a code mark renders"),
+                         ("docs <https://example.com/d>", "a link keeps its href"), ("| --- |", "a table gets its separator"),
+                         ("a\\|b", "a pipe in a cell is escaped"), ("root comment", "the root's comments render"),
+                         ("linked comment names NOPE-5", "a linked issue's comments render"),
+                         ("this ticket blocks it", "the link relation is named"),
+                         ("Not readable as issues: NOPE-5", "an unreadable mention is reported")):
+        check("snapshot: " + what, needle in body)
+    check("snapshot: no raw ADF JSON is left", '"type":"doc"' not in body and '"type": "doc"' not in body)
+
+    code, out = run("check")
+    check("snapshot: check after write is current and lists investigations",
+          code == 0 and out.get("status") == "current" and out.get("investigations") == ["INV-9"])
+    with open(path, "w") as f:
+        f.write(body.replace("<!--keru-format: 2-->\n", ""))
+    code, out = run("check")
+    check("snapshot: an older-format file reads stale, naming the rewrite",
+          code == 3 and out.get("status") == "stale" and "write ROOT-1" in out.get("reason", ""))
+
+    gap = issue("ROOT-4", "Task", doc(para(text("x"))),
+                links=[{"type": {"inward": "is blocked by", "outward": "blocks"}, "outwardIssue": {"key": "MISS-1"}}])
+    with open(os.path.join(fix, "ROOT-4.json"), "w") as f:
+        json.dump(gap, f)
+    code, out = run("write", "ROOT-4")
+    check("snapshot: a linked key that fails to fetch is reported", out.get("unfetched_keys") == ["MISS-1"])
+    code, out = run("check", "ROOT-4")
+    check("snapshot: a snapshot missing a linked key never reads current", out.get("status") != "current")
+    with open(os.path.join(fix, "MISS-1.json"), "w") as f:
+        json.dump(issue("MISS-1", "Investigation", doc(para(text("late")))), f)
+    code, out = run("check", "ROOT-4")
+    check("snapshot: once the missing key is readable, check says rewrite",
+          code == 3 and out.get("status") == "stale" and "MISS-1" in out.get("stale_keys", []))
+
+
 def main():
     test_safe_read()
     test_require_skill()
     test_check_output()
     test_judge_gating()
     test_write_gate()
+    test_comment_gate()
+    test_not_tickets_in_sync()
+    test_context_snapshot()
     test_check_drift()
     test_block_inline_interp()
     test_turn_deliverable()
